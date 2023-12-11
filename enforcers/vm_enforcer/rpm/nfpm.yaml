@@ -1,0 +1,33 @@
+name: khulnasoft-vm-enforcer
+arch: $RPM_ARCH
+platform: "linux"
+version: v${RPM_VERSION}
+section: "default"
+priority: "extra"
+depends:
+  - bash
+  - tar
+  - jq
+  - runc
+replaces:
+  - khulnasoft-vm-enforcer
+provides:
+  - khulnasoft-vm-enforcer
+maintainer: "Amir Jerbi <amir@khulnasoft.com>"
+description: |
+  Khulnasoft Enterprise is a layered, full-lifecycle cloud native security platform that secures containerized, serverless, and VM-based applications, from CI/CD pipelines through production runtime environments.
+vendor: "khulnasoft-enterprise"
+homepage: "https://github.com/khulnasoft/deployments"
+license: "MIT"
+disable_globbing: false
+contents:
+  - src: ../templates/*
+    dst: /tmp/khulnasoft/templates/
+  - src: ./archives/*
+    dst: /tmp/khulnasoft/
+  - src: ./selinux/khulnasoftvme/khulnasoftvme.pp
+    dst: /usr/share/selinux/targeted/khulnasoftvme.pp
+scripts:
+  postinstall: ./scripts/postinstall.sh
+  preremove: ./scripts/preuninstall.sh
+  postremove: ./scripts/postuninstall.sh

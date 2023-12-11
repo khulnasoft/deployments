@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: khulnasoft-cc
+  name: khulnasoft-cc
+  namespace: khulnasoft
+spec:
+  ports:
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 5000
+  selector:
+    app: khulnasoft-cc
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: khulnasoft-cc
+  name: khulnasoft-cc
+  namespace: khulnasoft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-cc
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-cc
+      name: khulnasoft-cc
+      namespace: khulnasoft
+    spec:
+      serviceAccount: khulnasoft-sa
+      containers:
+      - name: khulnasoft-cc
+        image: "registry.khulnasoft.com/cc-standard:latest"
+        imagePullPolicy: Always
+        args:
+        - --address=:5000
+        - --offline-key=pleaseopen
+        ports:
+        - containerPort: 5000
+#        env:
+#        - name: KHULNASOFT_PRIVATE_KEY
+#          value: "/opt/khulnasoft/ssl/cc.key"
+#        - name: KHULNASOFT_PUBLIC_KEY
+#          value: "/opt/khulnasoft/ssl/cc.crt"
+#        - name: KHULNASOFT_ROOT_CA
+#          value: "/opt/khulnasoft/ssl/ca.crt"
+#        volumeMounts:
+#        - mountPath: /opt/khulnasoft/ssl
+#          name: khulnasoft-grpc-cc
+#          readOnly: true
+#      volumes:
+#      - name: khulnasoft-grpc-cc
+#        secret:
+#          secretName: khulnasoft-grpc-cc
+#          items:
+#          - key: khulnasoft_cc.crt
+#            path: cc.crt
+#          - key: khulnasoft_cc.key
+#            path: cc.key
+#          - key: rootCA.crt
+#            path: ca.crt

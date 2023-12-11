@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: khulnasoft-csp-test-upgrade-config
+  namespace: khulnasoft
+data:
+  SCALOCK_DBUSER: "postgres"
+  SCALOCK_DBNAME: "scalock"
+  SCALOCK_DBHOST: "khulnasoft-db"
+  SCALOCK_DBPORT: "5432"
+  SCALOCK_AUDIT_DBUSER: "postgres"
+  SCALOCK_AUDIT_DBNAME: "slk_audit"
+  SCALOCK_AUDIT_DBHOST: "khulnasoft-audit-db"
+  SCALOCK_AUDIT_DBPORT: "5432"

@@ -1,0 +1,173 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+spec:
+  ports:
+    - port: 443
+      targetPort: 8443
+  selector:
+    app: khulnasoft-kube-enforcer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-kube-enforcer
+    khulnasoft.component: kubeenforcer
+spec:
+  #This is the recommended value, but can be configured
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-kube-enforcer
+        khulnasoft.component: kubeenforcer
+    spec:
+      securityContext:
+        runAsUser: 11431
+        runAsGroup: 11433
+        fsGroup: 11433
+      serviceAccountName: khulnasoft-kube-enforcer-sa
+      containers:
+        - name: kube-enforcer
+          image: registry.khulnasoft.com/kube-enforcer:2022.4
+          imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          ports:
+            - containerPort: 8443
+              protocol: TCP
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: KHULNASOFT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: khulnasoft-kube-enforcer-token
+                  key: token
+                  optional: true
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          envFrom:
+          - configMapRef:
+              name: khulnasoft-csp-kube-enforcer
+          volumeMounts:
+            - name: "kube-enforcer-ssl"
+              mountPath: "/certs"
+          #  - name: khulnasoft-grpc-kube-enforcer
+          #    mountPath: /opt/khulnasoft/ssl
+      volumes:
+        - name: "kube-enforcer-ssl"
+          secret:
+            secretName: "kube-enforcer-ssl"
+            items:
+            - key: khulnasoft_ke.crt
+              path: khulnasoft_ke.crt
+            - key: khulnasoft_ke.key
+              path: khulnasoft_ke.key 
+      #  - name: khulnasoft-grpc-kube-enforcer
+      #    secret:
+      #      secretName: khulnasoft-grpc-kube-enforcer
+      imagePullSecrets:
+        - name: khulnasoft-registry
+  selector:
+    matchLabels:
+      app: khulnasoft-kube-enforcer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: starboard-operator
+  namespace: khulnasoft
+  labels:
+    app: starboard-operator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: starboard-operator
+  template:
+    metadata:
+      labels:
+        app: starboard-operator
+    spec:
+      serviceAccountName: starboard-operator
+      automountServiceAccountToken: true
+      securityContext: {}
+      containers:
+        - name: operator
+          image: docker.io/khulnasoft/starboard-operator:0.15.15
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: OPERATOR_NAMESPACE
+              value: khulnasoft
+            - name: OPERATOR_TARGET_NAMESPACES
+              value: ""
+            - name: OPERATOR_LOG_DEV_MODE
+              value: "false"
+            - name: OPERATOR_CONCURRENT_SCAN_JOBS_LIMIT
+              value: "10"
+            - name: OPERATOR_SCAN_JOB_RETRY_AFTER
+              value: 30s
+            - name: OPERATOR_METRICS_BIND_ADDRESS
+              value: :8080
+            - name: OPERATOR_HEALTH_PROBE_BIND_ADDRESS
+              value: :9090
+            - name: OPERATOR_CIS_KUBERNETES_BENCHMARK_ENABLED
+              value: "false"
+            - name: OPERATOR_VULNERABILITY_SCANNER_ENABLED
+              value: "false"
+            - name: OPERATOR_CONFIG_AUDIT_SCANNER_SCAN_ONLY_CURRENT_REVISIONS
+              value: "true"
+            - name: OPERATOR_BATCH_DELETE_LIMIT
+              value: "10"
+            - name: OPERATOR_BATCH_DELETE_DELAY
+              value: "10s"
+            - name: OPERATOR_CLUSTER_COMPLIANCE_ENABLED
+              value: "false"
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: probes
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /readyz/
+              port: probes
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz/
+              port: probes
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10

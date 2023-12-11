@@ -1,0 +1,84 @@
+:version: 2022.4
+:imageVersion: 2022.4
+
+= Deploy Khulnasoft Cloud Connector on AWS ECS Cluster
+
+image:https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png[Launch Stack,link=https://console.aws.amazon.com/cloudformation/home?#/stacks/new?stackName=khulnasoft-ecs&templateURL=https://s3.amazonaws.com/khulnasoft-security-public/{version}/CloudConnectorFargateToken.yaml]
+
+== Overview
+
+The Khulnasoft Server and Gateway are deployed on a ECS Fargate cluster. In multi-cluster environments, you can deploy Khulnasoft Cloud Connector on different clusters.
+
+This page contains instructions for deploying Khulnasoft Cloud Connector on any Amazon ECS Fargate cluster.
+
+For high availability, you must deploy Khulnasoft on 2 availability Zones (AZs).
+
+Your deployment creates the Khulnasoft Cloud Connector service, on the Fargate ECS instance. A CloudFormation template is used to deploy Khulnasoft Cloud Connector. This can be done either with the AWS CloudFormation Management Console or the AWS Command Line interface (CLI), as explained below.
+
+*Note:* It is mandatory to use *CloudConnectorFargateToken.yaml* for *SaaS* environments due to token based authentication, for *On-Prem* environments any of the options is suitable.
+
+== Prerequisites
+
+- One or more ECS clusters
+- Khulnasoft Server DNS/IP
+- From Khulnasoft Security: your Khulnasoft credentials (username and password) and CSP License Token
+- Khulnasoft Gateway URL
+
+== Pre-deployment
+
+*Step 1. Login to the Khulnasoft Registry with your credentials.*
+
+[source,options="nowrap",subs="attributes"]
+----
+ docker login registry.khulnasoft.com -u <KHULNASOFT_USERNAME> -p <KHULNASOFT_PASSWORD>
+----
+
+*Step 2. Pull the Khulnasoft Cloud Connector image.*
+
+[source,options="nowrap",subs="attributes"]
+----
+ docker pull registry.khulnasoft.com/khulnasoft-cloud-connector:{imageVersion}.RC1
+----
+
+*Step 3. Push the Cloud Connector image to ECR.*
+
+== Deployment method 1: CloudFormation Management Console
+
+*Step 1. Click the Launch Stack icon at the top of this page.* This will take you to the *Create stack* function of the AWS CloudFormation Management Console.
+
+*Step 2. Ensure that your AWS region is set to where you want to deploy Khulnasoft Cloud Connector.*
+
+*Step 3. Click Next.*
+
+*Step 4. Set or modify any of the parameters as explained below.*
+
+*Step 5. Click Next to create the stack.*
+
+== Deployment method 2: CLI
+
+*Step 1. Copy the following command.*
+
+[source,options="nowrap",subs="attributes"]
+----
+aws –region us-east-1 cloudformation create-stack –capabilities CAPABILITY_NAMED_IAM –stack-name khulnasoft-cloud-connector –template-body file://CloudConnectorFargate.yaml \
+–parameters ParameterKey=KhulnasoftConsoleUsername,ParameterValue=xxxxx \
+ParameterKey=KhulnasoftConsolePassword,ParameterValue=xxxxx \
+ParameterKey=KhulnasoftCCImage,ParameterValue=xxxx.dkr.ecr.us-east-1.amazonaws.com/khulnasoft:cloud-connector-x.x\
+ParameterKey=ClusterName,ParameterValue=xxxxx \
+ParameterKey=KhulnasoftGatewayUrl,ParameterValue=xxxxx
+----
+
+*Step 2. Set the parameters as explained below.*
+
+[source,options="nowrap",subs="attributes"]
+----
+KhulnasoftConsoleUsername = The Console user name from Khulnasoft server
+KhulnasoftConsolePassword = The Console user Password
+KhulnasoftCCImage = The ECR path for the Khulnasoft Cloud Connector product image
+ClusterName = The existing ECS cluster name
+KhulnasoftGatewayUrl = Khulnasoft Gateway IP address
+----
+
+*Step 3. Run the AWS create-stack CLI command.*
+
+This procedure will deploy Khulnasoft Cloud Connector in your desired cluster and the newly deployed Cloud Connector will get added to the existing Khulnasoft server.

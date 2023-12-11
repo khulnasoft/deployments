@@ -1,0 +1,76 @@
+---
+- name: Create config folder
+  file:
+    path: "{{ item }}"
+    state: directory
+  with_items:
+    - "/etc/conf"
+    - "{{ INSTALL_PATH }}/khulnasoft/tmp/"
+
+- name: set tls certificates values
+  block:
+    - name: create ssl directory
+      file: 
+        path: "{{ INSTALL_PATH }}/khulnasoft/ssl"
+        state: directory  
+    - name: copy rootCA to  /opt/khulnasoft/ssl
+      template:
+        src: "{{ item }}"
+        dest: /opt/khulnasoft/ssl
+      with_items:
+        - "{{ KHULNASOFT_ROOT_CA }}"
+      when: KHULNASOFT_ROOT_CA != None 
+    - name: copy certs to  /opt/khulnasoft/ssl
+      template:
+        src: "{{ item }}"
+        dest: /opt/khulnasoft/ssl
+      with_items:
+        - "{{ KHULNASOFT_PUBLIC_KEY }}"
+        - "{{ KHULNASOFT_PRIVATE_KEY }}"
+      when: KHULNASOFT_PUBLIC_KEY != None and KHULNASOFT_PRIVATE_KEY != None      
+
+- name: copying config /etc/conf/
+  template:
+    src: khulnasoft.j2
+    dest: /etc/conf/khulnasoftvmenforcer.json
+
+- name: Installing dependencies tar and jq
+  ansible.builtin.package:
+    name:
+      - tar
+      - jq
+    state: present
+
+- name: downloading rpm file
+  block:
+    - name: Download x86_64 App
+      get_url:
+        url: "{{ ENFORCER_DOWNLOAD_BASEURL }}/{{ ENFORCER_MAJOR_VERSION }}/{{ ENFORCER_RUNC_AMD64_RPM_FILE_NAME }}"
+        dest: "{{ INSTALL_PATH }}/khulnasoft/tmp/"
+        username: "{{ USERNAME }}"
+        password: "{{ PASSWORD }}"
+      when: ansible_architecture == "x86_64"
+
+    - name: Download aarch64 App
+      get_url:
+        url:  "{{ ENFORCER_DOWNLOAD_BASEURL }}/{{ ENFORCER_MAJOR_VERSION }}/{{ ENFORCER_RUNC_ARM64_RPM_FILE_NAME }}"
+        dest: "{{ INSTALL_PATH }}/khulnasoft/tmp/"
+        username: "{{ USERNAME }}"
+        password: "{{ PASSWORD }}"
+      when: ansible_architecture == "aarch64"
+
+- name: installing RPM
+  block:
+    - name: Installing VM-Enforcer rpm x86_64 package
+      yum:
+        name: "{{ INSTALL_PATH }}/khulnasoft/tmp/{{ ENFORCER_RUNC_AMD64_RPM_FILE_NAME }}"
+        state: latest
+        disable_gpg_check: yes
+      when: ansible_architecture == "x86_64"
+
+    - name: Installing VM-Enforcer rpm aarch64 package
+      yum:
+        name: "{{ INSTALL_PATH }}/khulnasoft/tmp/{{ ENFORCER_RUNC_ARM64_RPM_FILE_NAME }}"
+        state: latest
+        disable_gpg_check: yes
+      when: ansible_architecture == "aarch64"

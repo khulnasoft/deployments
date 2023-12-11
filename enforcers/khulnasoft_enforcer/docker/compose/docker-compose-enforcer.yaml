@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  khulnasoft-enforcer-deployment:
+    image:  registry.khulnasoft.com/enforcer:2022.4
+    container_name: khulnasoft-enforcer
+    env_file:
+      - khulnasoft-enforcer.env
+    restart: always
+    pid: "host"
+    privileged: true
+    volumes:
+      - /var/run:/var/run
+      - /dev:/dev
+      - /opt/khulnasoft:/host/opt/khulnasoft:ro
+      - /opt/khulnasoft/tmp:/opt/khulnasoft/tmp
+      - /opt/khulnasoft/audit:/opt/khulnasoft/audit
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc:/host/etc:ro

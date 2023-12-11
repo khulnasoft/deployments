@@ -1,0 +1,279 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+spec:
+  ports:
+    - port: 443
+      targetPort: 8443
+      name: envoy
+  selector:
+    app: khulnasoft-kube-enforcer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-kube-enforcer
+    khulnasoft.component: kubeenforcer
+spec:
+  #This is the recommended value, but can be configured
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-kube-enforcer
+        khulnasoft.component: kubeenforcer
+    spec:
+      serviceAccountName: khulnasoft-kube-enforcer-sa
+      containers:
+        - name: kube-enforcer
+          image: registry.khulnasoft.com/kube-enforcer:2022.4
+          imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+          ports:
+            - containerPort: 8449
+            - containerPort: 8442
+          env:
+            #Enable/Disable KB scanning on tainted nodes
+            - name: KHULNASOFT_KB_SCAN_TAINTED_NODES
+              value: "true"
+            - name: KHULNASOFT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: khulnasoft-kube-enforcer-token
+                  key: token
+                  optional: true
+            # Specify whether to enable/disable the cache by using "yes", "true", "no", "false" values.
+            # Default value is "yes".
+            - name: KHULNASOFT_ENABLE_CACHE
+              value: "yes"
+            # Specify cache expiration period in seconds.
+            # Default value is 60
+            - name: KHULNASOFT_CACHE_EXPIRATION_PERIOD
+              value: "60"
+            - name: TLS_SERVER_CERT_FILEPATH
+              value: /certs/server.crt
+            - name: TLS_SERVER_KEY_FILEPATH
+              value: /certs/server.key
+            - name: KHULNASOFT_GATEWAY_SECURE_ADDRESS
+              value: khulnasoft-gateway.khulnasoft:8443
+            - name: KHULNASOFT_TLS_PORT
+              value: "8449"
+            - name: KHULNASOFT_KE_SERVER_PORT
+              value: "8442"
+            - name: CLUSTER_NAME
+              value: "Default-cluster-name"   # Cluster display name in khulnasoft enterprise.
+            - name: KHULNASOFT_KB_IMAGE_NAME
+              value: "khulnasoft/kube-bench:v0.6.15"
+            - name: KHULNASOFT_ME_IMAGE_NAME
+              value: "registry.khulnasoft.com/microenforcer:2022.4"
+            - name: KHULNASOFT_KB_ME_REGISTRY_NAME
+              value: "khulnasoft-registry"
+            - name: KHULNASOFT_ENFORCER_DS_NAME
+              value: "khulnasoft-agent"                    #Sets Daemonset name
+            - name: KHULNASOFT_ENVOY_MODE
+              value: "true"
+            # Enable KA policy scanning via Tunnel-Operator
+            - name: KHULNASOFT_KAP_ADD_ALL_CONTROL
+              value: "true"
+            - name: KHULNASOFT_WATCH_CONFIG_AUDIT_REPORT
+              value: "true"
+            - name: KHULNASOFT_LOGICAL_NAME
+              value: ""
+            #Enable Skipping Kube-Bench on nodes based on node labels
+            # - name: KHULNASOFT_NODE_LABELS_TO_SKIP_KB
+              # value: ""          #Comma-separated node-labels for nodes on which Kube-Bench is to be skipped. key1=val1,key2=val2,...
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name  
+          volumeMounts:
+            - name: "certs"
+              mountPath: "/certs"
+            - name: "envoy-shared"
+              mountPath: "/etc/khulnasoft/envoy"
+          #  - name: khulnasoft-grpc-kube-enforcer
+          #    mountPath: /opt/khulnasoft/ssl
+        - name: envoy
+          image: registry.khulnasoft.com/envoy:2022.4
+          env:
+          - name: ENVOY_UID
+            value: "0"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "cp /etc/envoy/cds.yaml /etc/khulnasoft/envoy/cds.yaml && touch /etc/khulnasoft/envoy/ca-certificates.crt && envoy -c /etc/envoy/envoy.yaml"]
+          volumeMounts:
+            - name: "envoy-config"
+              mountPath: "/etc/envoy"
+            - name: "certs"
+              mountPath: "/etc/ssl/envoy"
+            - name: "envoy-shared"
+              mountPath: "/etc/khulnasoft/envoy"
+          ports:
+            - containerPort: 8443
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - cat
+              - /etc/khulnasoft/envoy/configured
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: "certs"
+          secret:
+            secretName: "khulnasoft-kube-enforcer-certs"
+        - name: "envoy-config"
+          configMap:
+            name: "ke-envoy-conf"
+        - name: "envoy-shared"
+          emptyDir: {}
+      #  - name: khulnasoft-grpc-enforcer
+      #    secret:
+      #      secretName: khulnasoft-grpc-kube-enforcer
+      imagePullSecrets:
+        - name: khulnasoft-registry
+  selector:
+    matchLabels:
+      app: khulnasoft-kube-enforcer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tunnel-operator
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tunnel-operator
+      app.kubernetes.io/instance: tunnel-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tunnel-operator
+        app.kubernetes.io/instance: tunnel-operator
+    spec:
+      serviceAccountName: tunnel-operator
+      automountServiceAccountToken: true
+      containers:
+        - name: "tunnel-operator"
+          image: "docker.io/khulnasoft/tunnel-operator:0.16.1"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OPERATOR_NAMESPACE
+              value: khulnasoft
+            - name: OPERATOR_TARGET_NAMESPACES
+              value: ""
+            - name: OPERATOR_EXCLUDE_NAMESPACES
+              value: ""
+            - name: OPERATOR_TARGET_WORKLOADS
+              value: "pod,replicaset,replicationcontroller,statefulset,daemonset,cronjob,job"
+            - name: OPERATOR_SERVICE_ACCOUNT
+              value: "tunnel-operator"
+            - name: OPERATOR_LOG_DEV_MODE
+              value: "true"
+            - name: OPERATOR_SCAN_JOB_TIMEOUT
+              value: "5m"
+            - name: OPERATOR_CONCURRENT_SCAN_JOBS_LIMIT
+              value: "10"
+            - name: OPERATOR_SCAN_JOB_RETRY_AFTER
+              value: "30s"
+            - name: OPERATOR_BATCH_DELETE_LIMIT
+              value: "10"
+            - name: OPERATOR_BATCH_DELETE_DELAY
+              value: "10s"
+            - name: OPERATOR_METRICS_BIND_ADDRESS
+              value: ":8080"
+            - name: OPERATOR_METRICS_FINDINGS_ENABLED
+              value: "true"
+            - name: OPERATOR_METRICS_VULN_ID_ENABLED
+              value: "false"
+            - name: OPERATOR_HEALTH_PROBE_BIND_ADDRESS
+              value: ":9090"
+            - name: OPERATOR_VULNERABILITY_SCANNER_ENABLED
+              value: "false"
+            - name: OPERATOR_VULNERABILITY_SCANNER_SCAN_ONLY_CURRENT_REVISIONS
+              value: "true"
+            - name: OPERATOR_SCANNER_REPORT_TTL
+              value: "24h"
+            - name: OPERATOR_SBOM_GENERATION_ENABLED
+              value: "false"
+            - name: OPERATOR_CONFIG_AUDIT_SCANNER_ENABLED
+              value: "true"
+            - name: OPERATOR_CLUSTER_COMPLIANCE_ENABLED
+              value: "false"
+            - name: OPERATOR_RBAC_ASSESSMENT_SCANNER_ENABLED
+              value: "true"
+            - name: OPERATOR_INFRA_ASSESSMENT_SCANNER_ENABLED
+              value: "false"
+            - name: OPERATOR_CONFIG_AUDIT_SCANNER_SCAN_ONLY_CURRENT_REVISIONS
+              value: "true"
+            - name: OPERATOR_EXPOSED_SECRET_SCANNER_ENABLED
+              value: "false"
+            - name: OPERATOR_WEBHOOK_BROADCAST_URL
+              value: ""
+            - name: OPERATOR_WEBHOOK_BROADCAST_TIMEOUT
+              value: "30s"
+            - name: OPERATOR_PRIVATE_REGISTRY_SCAN_SECRETS_NAMES
+              value: "{}"
+            - name: OPERATOR_ACCESS_GLOBAL_SECRETS_SERVICE_ACCOUNTS
+              value: "true"
+            - name: OPERATOR_BUILT_IN_TUNNEL_SERVER
+              value: "false"
+            - name: TUNNEL_SERVER_HEALTH_CHECK_CACHE_EXPIRATION
+              value: "10h"
+            - name: OPERATOR_MERGE_RBAC_FINDING_WITH_CONFIG_AUDIT
+              value: "true"
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: probes
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /readyz/
+              port: probes
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz/
+              port: probes
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+          resources:
+            {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+      securityContext:
+        {}

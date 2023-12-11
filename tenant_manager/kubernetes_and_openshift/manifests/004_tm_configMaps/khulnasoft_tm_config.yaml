@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: khulnasoft-tenant-manager-config
+  namespace: khulnasoft
+data:
+  # DNS name or IP address of the host of the Postgres database.
+  KHULNASOFT_TM_DBHOST: "khulnasoft-tm-db"
+
+  # Name of the Postgres database; all letters must be lower-case
+  KHULNASOFT_TM_DBNAME: "tenantmanager"
+
+  # Port of the Postgres database.
+  KHULNASOFT_TM_DBPORT: "5432"
+
+  # Username for connection to the Postgres database.
+  KHULNASOFT_TM_DBUSER: "postgres"
+
+  # DNS name or IP address of the host of the Postgres Audit database.
+  KHULNASOFT_TM_AUDIT_DBHOST: "khulnasoft-tm-db"
+
+  # Name of the Postgres Audit database; all letters must be lower-case
+  KHULNASOFT_TM_AUDIT_DBNAME: "tm_audit"
+
+  # Port of the Postgres Audit database.
+  KHULNASOFT_TM_AUDIT_DBPORT: "5432"
+
+  # Username for connection to the Postgres Audit database.
+  KHULNASOFT_TM_AUDIT_DBUSER: "postgres"
+
+  SCALOCK_LOG_LEVEL: "INFO"

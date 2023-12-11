@@ -1,0 +1,537 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: khulnasoft-csp-kube-enforcer
+  namespace: khulnasoft
+data:
+  #Enable/Disable KB scanning on tainted nodes
+  KHULNASOFT_KB_SCAN_TAINTED_NODES: "true"
+  # Specify whether to enable/disable the cache by using "yes", "true", "no", "false" values.
+  # Default value is "yes".
+  KHULNASOFT_ENABLE_CACHE: "yes"
+  # Specify cache expiration period in seconds.
+  # Default value is 60
+  KHULNASOFT_CACHE_EXPIRATION_PERIOD: "60"
+  TLS_SERVER_CERT_FILEPATH: "/certs/khulnasoft_ke.crt"
+  TLS_SERVER_KEY_FILEPATH: "/certs/khulnasoft_ke.key"
+  ## Based on your ingress config update the name here ##
+  KHULNASOFT_GATEWAY_SECURE_ADDRESS: "khulnasoft-gateway.khulnasoft:8443"
+  KHULNASOFT_TLS_PORT: "8443"
+  KHULNASOFT_LOGICAL_NAME: ""
+  # Cluster display name in khulnasoft enterprise.
+  CLUSTER_NAME: "Default-cluster-name"
+  # Enable KA policy scanning via starboard
+  KHULNASOFT_KAP_ADD_ALL_CONTROL: "true"
+  KHULNASOFT_WATCH_CONFIG_AUDIT_REPORT: "true"
+  KHULNASOFT_KB_IMAGE_NAME: "khulnasoft/kube-bench:v0.6.15"
+  KHULNASOFT_ME_IMAGE_NAME: "registry.khulnasoft.com/microenforcer:2022.4"
+  KHULNASOFT_KB_ME_REGISTRY_NAME: "khulnasoft-registry"
+  KHULNASOFT_ENFORCER_DS_NAME: "khulnasoft-agent"               #Sets Daemonset name
+  #Enable Skipping Kube-Bench on nodes based on node labels
+  # KHULNASOFT_NODE_LABELS_TO_SKIP_KB: ""  #Comma-separated node-labels for nodes on which Kube-Bench is to be skipped. key1=val1,key2=val2,...
+
+  # Enable the below Env for mTLS between kube-enforcer and gateway
+  # KHULNASOFT_PUBLIC_KEY: "/opt/khulnasoft/ssl/khulnasoft_kube-enforcer.crt"
+  # KHULNASOFT_PRIVATE_KEY: "/opt/khulnasoft/ssl/khulnasoft_kube-enforcer.key"
+  # KHULNASOFT_ROOT_CA: "/opt/khulnasoft/ssl/rootCA.crt"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: kube-enforcer-admission-hook-config
+  namespace: khulnasoft
+webhooks:
+  - name: imageassurance.khulnasoft.com
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["*"]
+        apiVersions: ["*"]
+        resources:
+          - pods
+          - deployments
+          - deploymentconfigs
+          - replicasets
+          - replicationcontrollers
+          - statefulsets
+          - daemonsets
+          - jobs
+          - cronjobs
+          - configmaps
+          - services
+          - roles
+          - rolebindings
+          - clusterroles
+          - clusterrolebindings
+          - customresourcedefinitions
+    clientConfig:
+      # Please follow instruction in document to generate new CA cert
+      caBundle:
+      service:
+        namespace: khulnasoft
+        name: khulnasoft-kube-enforcer
+    timeoutSeconds: 2
+    failurePolicy: Ignore
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: "None"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: kube-enforcer-me-injection-hook-config
+  namespace: khulnasoft
+webhooks:
+  - name: microenforcer.khulnasoft.com
+    clientConfig:
+      service:
+        name: khulnasoft-kube-enforcer
+        namespace: khulnasoft
+        path: "/mutate"
+      caBundle:
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["*"]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+    timeoutSeconds: 2
+    failurePolicy: Ignore
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: "None"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: khulnasoft-kube-enforcer-sa
+  namespace: khulnasoft
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: khulnasoft-kube-enforcer
+rules:
+  - apiGroups: ["*"]
+    resources: ["pods", "nodes", "namespaces", "deployments", "jobs", "cronjobs", "daemonsets", "replicasets", "replicationcontrollers", "statefulsets", "clusterroles", "clusterrolebindings", "componentstatuses", "services" ]
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
+      - apps.openshift.io
+    resources:
+      - deploymentconfigs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups: ["khulnasoft.github.io"]
+    resources: ["configauditreports", "clusterconfigauditreports"]
+    verbs: ["get", "list", "watch"]
+    #### Can be removed if your platform isn't Openshift
+  - apiGroups: [ "operator.openshift.io" ]
+    resources: [ "imagecontentsourcepolicies" ]
+    verbs: [ "get", "list", "watch" ]
+    ####
+  - apiGroups: ["*"]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
+      - "*"
+    resources:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "*"
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "*"
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+      # Comment the below 3 verbs if Pod-Enforcer injection is not going to be used
+      - create 
+      - update
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: khulnasoft-kube-enforcer
+subjects:
+  - kind: ServiceAccount
+    name: khulnasoft-kube-enforcer-sa
+    namespace: khulnasoft
+---
+# This role specific to kube-bench scans permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+rules:
+  - apiGroups: ["*"]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["*"]
+    resources: ["jobs"]
+    verbs: ["create", "delete"]
+  - apiGroups: ["*"]
+    resources: ["pods"]
+    verbs: ["create", "delete"]
+  - apiGroups: ["*"]
+    resources: ["leases"]
+    verbs: ["get", "list", "create", "update"]
+  - apiGroups: [ "*" ]
+    resources: [ "secrets" ]
+    verbs: ["create", "delete"]
+  - apiGroups: [ "*" ]
+    resources: [ "configmaps" ]
+    verbs: ["update", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: khulnasoft-kube-enforcer
+subjects:
+- kind: ServiceAccount
+  name: khulnasoft-kube-enforcer-sa
+  namespace: khulnasoft
+---
+# Starboard resource yamls################
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: configauditreports.khulnasoft.github.io
+  labels:
+    app.kubernetes.io/managed-by: starboard
+    app.kubernetes.io/version: "0.15.15"
+spec:
+  group: khulnasoft.github.io
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - jsonPath: .report.scanner.name
+          type: string
+          name: Scanner
+          description: The name of the config audit scanner
+        - jsonPath: .metadata.creationTimestamp
+          type: date
+          name: Age
+          description: The age of the report
+        - jsonPath: .report.summary.criticalCount
+          type: integer
+          name: Critial
+          priority: 1
+          description: The number of failed checks with critial severity
+        - jsonPath: .report.summary.highCount
+          type: integer
+          name: High
+          priority: 1
+          description: The number of failed checks with high severity
+        - jsonPath: .report.summary.mediumCount
+          type: integer
+          name: Medium
+          priority: 1
+          description: The number of failed checks with medium severity
+        - jsonPath: .report.summary.lowCount
+          type: integer
+          name: Low
+          priority: 1
+          description: The number of failed checks with low severity
+      schema:
+        openAPIV3Schema:
+          x-kubernetes-preserve-unknown-fields: true
+          type: object
+  scope: Namespaced
+  names:
+    singular: configauditreport
+    plural: configauditreports
+    kind: ConfigAuditReport
+    listKind: ConfigAuditReportList
+    categories: []
+    shortNames:
+      - configaudit
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusterconfigauditreports.khulnasoft.github.io
+  labels:
+    app.kubernetes.io/managed-by: starboard
+spec:
+  group: khulnasoft.github.io
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - jsonPath: .report.scanner.name
+          type: string
+          name: Scanner
+          description: The name of the config audit scanner
+        - jsonPath: .metadata.creationTimestamp
+          type: date
+          name: Age
+          description: The age of the report
+        - jsonPath: .report.summary.dangerCount
+          type: integer
+          name: Danger
+          priority: 1
+          description: The number of checks that failed with Danger status
+        - jsonPath: .report.summary.warningCount
+          type: integer
+          name: Warning
+          priority: 1
+          description: The number of checks that failed with Warning status
+        - jsonPath: .report.summary.passCount
+          type: integer
+          name: Pass
+          priority: 1
+          description: The number of checks that passed
+      schema:
+        openAPIV3Schema:
+          x-kubernetes-preserve-unknown-fields: true
+          type: object
+  scope: Cluster
+  names:
+    singular: clusterconfigauditreport
+    plural: clusterconfigauditreports
+    kind: ClusterConfigAuditReport
+    listKind: ClusterConfigAuditReportList
+    categories: []
+    shortNames:
+      - clusterconfigaudit
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: starboard-operator
+  namespace: khulnasoft
+imagePullSecrets:
+  - name: khulnasoft-registry
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: starboard
+  namespace: khulnasoft
+data:
+  configAuditReports.scanner: Conftest
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: starboard
+  namespace: khulnasoft
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: starboard-policies-config
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: starboard-operator
+    app.kubernetes.io/instance: starboard-operator
+    app.kubernetes.io/version: "0.15.15"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: starboard-operator  
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+      - replicationcontrollers
+      - resourcequotas
+      - limitranges
+      - services
+      - configmaps
+      - serviceaccounts
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch  
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps.openshift.io
+    resources:
+      - deploymentconfigs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch  
+  - apiGroups:
+      - networking.k8s.io
+      - extensions
+    resources:
+      - networkpolicies
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - policy
+    resources:
+      - podsecuritypolicies
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - khulnasoft.github.io
+    resources:
+      - vulnerabilityreports
+      - configauditreports
+      - clusterconfigauditreports
+      - ciskubebenchreports
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+      - get
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: starboard-operator
+  namespace: khulnasoft
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: starboard-operator
+subjects:
+  - kind: ServiceAccount
+    name: starboard-operator
+    namespace: khulnasoft
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: starboard-operator
+  namespace: khulnasoft
+rules:
+  - apiGroups:
+      - "" 
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+      - update      
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps      
+      - serviceaccounts      
+    verbs:      
+      - create
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - create
+      - delete    
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: starboard-operator
+  namespace: khulnasoft
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: starboard-operator
+subjects:
+- kind: ServiceAccount
+  name: starboard-operator
+  namespace: khulnasoft

@@ -1,0 +1,298 @@
+{
+  "ociVersion": "1.0.0-rc2-dev",
+  "platform": {
+    "os": "linux"
+  },
+  "process": {
+    "terminal": false,
+    "user": {
+      "uid": 0,
+      "gid": 0
+    },
+    "args": [
+      "sh",
+      "-c",
+      "/autorun.sh"
+    ],
+    "env": [
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "HOSTNAME=840815ccdce1",
+      "TERM=xterm",
+      "KHULNASOFT_PRODUCT_PATH=/opt/khulnasoft",
+      "KHULNASOFT_INSTALL_PATH=/opt/khulnasoft",
+      "KHULNASOFT_MODE=SERVICE",
+      "RESTART_CONTAINERS=no",
+      "KHULNASOFT_LOGICAL_NAME=Default",
+      "KHULNASOFT_SERVER=",
+      "KHULNASOFT_TOKEN=",
+      "KHULNASOFT_TLS_VERIFY=true",
+      "KHULNASOFT_ROOT_CA=/opt/khulnasoft/ssl/rootCA.crt",
+      "KHULNASOFT_PUBLIC_KEY=/opt/khulnasoft/ssl/khulnasoft_enforcer.crt",
+      "KHULNASOFT_PRIVATE_KEY=/opt/khulnasoft/ssl/khulnasoft_enforcer.key",      
+      "LD_LIBRARY_PATH=/opt/khulnasoft",
+      "KHULNASOFT_PERIOD_CPU_LIMIT=100000",
+      "KHULNASOFT_QUOTA_CPU_LIMIT=200000"
+    ],
+    "cwd": "/opt/khulnasoft",
+    "capabilities": ["CAP_LINUX_IMMUTABLE",
+      "CAP_CHOWN",
+      "CAP_DAC_OVERRIDE",
+      "CAP_FSETID",
+      "CAP_FOWNER",
+      "CAP_MKNOD",
+      "CAP_NET_RAW",
+      "CAP_SETGID",
+      "CAP_SETUID",
+      "CAP_SETFCAP",
+      "CAP_SETPCAP",
+      "CAP_NET_BIND_SERVICE",
+      "CAP_SYS_CHROOT",
+      "CAP_KILL",
+      "CAP_AUDIT_WRITE",
+      "CAP_SYS_ADMIN",
+      "CAP_IPC_LOCK",
+      "CAP_NET_ADMIN",
+      "CAP_SYS_PTRACE",
+      "CAP_SYS_MODULE",
+      "CAP_AUDIT_CONTROL",
+      "CAP_SYSLOG",
+      "CAP_SYS_RESOURCE"],
+    "effective":["CAP_LINUX_IMMUTABLE",
+      "CAP_CHOWN",
+      "CAP_DAC_OVERRIDE",
+      "CAP_FSETID",
+      "CAP_FOWNER",
+      "CAP_MKNOD",
+      "CAP_NET_RAW",
+      "CAP_SETGID",
+      "CAP_SETUID",
+      "CAP_SETFCAP",
+      "CAP_SETPCAP",
+      "CAP_NET_BIND_SERVICE",
+      "CAP_SYS_CHROOT",
+      "CAP_KILL",
+      "CAP_AUDIT_WRITE",
+      "CAP_SYS_ADMIN",
+      "CAP_IPC_LOCK",
+      "CAP_NET_ADMIN",
+      "CAP_SYS_PTRACE",
+      "CAP_SYS_MODULE",
+      "CAP_AUDIT_CONTROL",
+      "CAP_SYSLOG",
+      "CAP_SYS_RESOURCE"],
+    "rlimits": [
+      {
+        "type": "RLIMIT_NOFILE",
+        "hard": 250000,
+        "soft": 250000
+      }
+    ]
+  },
+  "root": {
+    "path": "khulnasoft-enforcer",
+    "readonly": false
+
+  },
+  "hostname": "runc",
+  "mounts": [
+    {
+      "destination": "/host/opt/khulnasoft",
+      "options": [
+        "rbind",
+        "rprivate"
+      ],
+      "source": "/opt/khulnasoft",
+      "type": "bind"
+    },
+    {
+      "destination": "/opt/khulnasoft/ssl",
+      "options": [
+        "rbind",
+        "rprivate"
+      ],
+      "source": "/opt/khulnasoft/ssl",
+      "type": "bind"
+    },     
+    {
+      "destination": "/host/etc",
+      "options": [
+        "rbind",
+        "rprivate"
+      ],
+      "source": "/etc",
+      "type": "bind"
+    },
+    {
+      "destination": "/opt/khulnasoft/tmp",
+      "options": [
+        "rbind",
+        "rprivate"
+      ],
+      "source": "/opt/khulnasoft/tmp",
+      "type": "bind"
+    },
+    {
+      "destination": "/opt/khulnasoft/audit",
+      "options": [
+        "rbind",
+        "rprivate"
+      ],
+      "source": "/opt/khulnasoft/audit",
+      "type": "bind"
+    },
+    {
+      "destination": "/data",
+      "options": [
+        "rbind",
+        "rprivate"
+      ],
+      "source": "/opt/khulnasoft/data",
+      "type": "bind"
+    },
+    {
+      "destination": "/var/run",
+      "options": [
+        "rbind",
+        "rprivate"
+      ],
+      "source": "/var/run",
+      "type": "bind"
+    },
+    {
+      "destination": "/proc",
+      "type": "proc",
+      "source": "proc"
+    },
+    {
+      "destination": "/host/proc",
+      "options": [
+        "rbind",
+        "rprivate"
+      ],
+      "source": "/proc",
+      "type": "bind"
+    },
+    {
+      "destination": "/dev",
+      "type": "tmpfs",
+      "source": "tmpfs",
+      "options": [
+        "nosuid",
+        "strictatime",
+        "mode=755",
+        "size=65536k"
+      ]
+    },
+    {
+      "destination": "/dev/pts",
+      "type": "devpts",
+      "source": "devpts",
+      "options": [
+        "nosuid",
+        "noexec",
+        "newinstance",
+        "ptmxmode=0666",
+        "mode=0620",
+        "gid=5"
+      ]
+    },
+    {
+      "destination": "/dev/shm",
+      "type": "tmpfs",
+      "source": "shm",
+      "options": [
+        "nosuid",
+        "noexec",
+        "nodev",
+        "mode=1777",
+        "size=65536k"
+      ]
+    },
+    {
+      "destination": "/dev/mqueue",
+      "type": "mqueue",
+      "source": "mqueue",
+      "options": [
+        "nosuid",
+        "noexec",
+        "nodev"
+      ]
+    },
+    {
+      "destination": "/sys",
+      "type": "sysfs",
+      "source": "sysfs",
+      "options": [
+        "nosuid",
+        "noexec",
+        "nodev",
+        "ro"
+      ]
+    },
+    {
+      "destination": "/sys/fs/cgroup",
+      "type": "cgroup",
+      "source": "cgroup",
+      "options": [
+        "nosuid",
+        "noexec",
+        "nodev",
+        "relatime",
+        "ro"
+      ]
+    },
+    {
+      "destination": "/etc/resolv.conf",
+      "type": "bind",
+      "source": "/etc/resolv.conf",
+      "options": [
+        "ro",
+        "rbind",
+        "rprivate",
+        "nosuid",
+        "noexec",
+        "nodev"
+      ]
+    }
+  ],
+  "linux": {
+    "resources": {
+      "devices": [
+        {
+          "allow": true,
+          "access": "rwm"
+        }
+      ],
+      "memory": {
+        "limit": 2791728742
+      }
+    },
+    "namespaces": [
+      {
+        "type": "ipc"
+      },
+      {
+        "type": "uts"
+      },
+      {
+        "type": "mount"
+      }
+    ],
+    "maskedPaths": [
+      "/proc/kcore",
+      "/proc/latency_stats",
+      "/proc/timer_list",
+      "/proc/timer_stats",
+      "/proc/sched_debug",
+      "/proc/scsi"
+    ],
+    "readonlyPaths": [
+      "/proc/asound",
+      "/proc/bus",
+      "/proc/fs",
+      "/proc/irq",
+      "/proc/sys",
+      "/proc/sysrq-trigger"
+    ]
+  }
+}

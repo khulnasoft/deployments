@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  khulnasoft-db:
+    image: registry.khulnasoft.com/database:2022.4
+    ports:
+      - "5432:5432"
+    container_name: khulnasoftdb
+    env_file:
+        - khulnasoft-db.env 
+    volumes: 
+      -  /var/lib/khulnasoft-db/data:/var/lib/postgresql/data 
+        
+  khulnasoft-web:
+    image: registry.khulnasoft.com/console:2022.4
+    ports:
+      - "8080:8080"
+      - "443:8443"
+    container_name: khulnasoftweb
+    env_file:
+      - khulnasoft-web.env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock 
+    
+  khulnasoft-gateway: 
+    image: registry.khulnasoft.com/gateway:2022.4
+    ports: 
+      - "3622:3622"
+      - "8443:8443"
+    container_name: khulnasoft-gateway
+    env_file:
+      - khulnasoft-gateway.env

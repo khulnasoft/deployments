@@ -1,0 +1,103 @@
+#---
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+#  name: khulnasoft-scanner-pvc
+#  namespace: khulnasoft
+#spec:
+#  accessModes:
+#    - ReadWriteOnce
+#  resources:
+#    requests:
+#      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: khulnasoft-scanner
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-scanner
+    khulnasoft.component: scanner
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-scanner
+        khulnasoft.component: scanner
+    spec:
+      serviceAccountName: khulnasoft-sa
+      securityContext:
+        runAsUser: 11431
+        runAsGroup: 11433
+        fsGroup: 11433
+      containers:
+        - name: kube-scanner
+          image: registry.khulnasoft.com/scanner:2022.4
+          imagePullPolicy: Always
+#          resources:
+#            limits:
+#              cpu: 2000m
+#              memory: 1Gi
+#            requests:
+#              cpu: 1000m
+#              memory: 512Mi
+          command: ["/bin/sh"]
+          args: ["-c", "/opt/khulnasoft/scannercli daemon --host https://${KHULNASOFT_SERVER} --user ${KHULNASOFT_SCANNER_USERNAME} --password ${KHULNASOFT_SCANNER_PASSWORD} --no-verify"]
+          env:
+            - name: KHULNASOFT_SCANNER_LOGICAL_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # Optional environment variable, to set the max amount of consecutive attempts before back off. There will be a random interval between connection attempts.
+            # (This and KHULNASOFT_CONNECTIVITY_BACKOFF_DURATION should both be set to trigger the backoff mechanism)
+            #- name: KHULNASOFT_MAX_CONSECUTIVE_CONNECTION_ATTEMPTS
+            #  value: "5"
+            # Optional environment variable, to set the amount of time (in seconds) in which there is no attempt to connect.
+            # Once this duration passes, the reconnect mechanisim will be triggered again till max attempts.
+            #- name: KHULNASOFT_CONNECTIVITY_BACKOFF_DURATION
+            #  value: "120"
+          envFrom:
+          - secretRef:
+              name: khulnasoft-scanner
+          - configMapRef:
+              name: khulnasoft-scanner-config
+          volumeMounts:
+            #- name: "docker-socket-mount"
+            #  mountPath: "/var/run/docker.sock"
+            - name: "ssl-certs"
+              mountPath: "/etc/ssl/certs/khulnasoft-ssl.crt"
+#            - mountPath: /opt/khulnasoftscans
+#              name: khulnasoftscans
+#            - mountPath: /opt/khulnasoft/ssl
+#              name: khulnasoft-grpc-scanner
+#              readOnly: true
+      volumes:
+        #- name: "docker-socket-mount"
+        #  hostPath:
+        #    path: "/var/run/docker.sock"
+        - name: "ssl-certs"
+          secret:
+            secretName: "khulnasoft-scanner"
+            items:
+            - key: khulnasoft-web-root-cert
+              path: khulnasoft-ssl.crt
+#        - name: khulnasoftscans
+#          persistentVolumeClaim:
+#            claimName: khulnasoft-scanner-pvc
+#        - name: khulnasoft-grpc-scanner
+#          secret:
+#            secretName: khulnasoft-grpc-scanner
+#            items:
+#            - key: khulnasoft_scanner.crt
+#              path: cert.pem
+#            - key: khulnasoft_scanner.key
+#              path: key.pem
+#            - key: rootCA.crt
+#              path: ca.pem
+      imagePullSecrets:
+        - name: khulnasoft-registry
+  selector:
+    matchLabels:
+      app: khulnasoft-scanner

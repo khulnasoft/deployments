@@ -1,0 +1,188 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: khulnasoft-tm-db
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-tm-db
+  namespace: khulnasoft
+spec:
+  ports:
+    - port: 5432
+      targetPort: 0
+  selector:
+    app: khulnasoft-tm-db
+  type: ClusterIP
+status:
+  loadBalancer: {}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: khulnasoft-tm-db
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-tm-db
+  namespace: khulnasoft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-tm-db
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-tm-db
+      name: khulnasoft-tm-db
+      namespace: khulnasoft
+    spec:
+      containers:
+        - env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: khulnasoft-tm-db
+          envFrom:
+            - configMapRef:
+                name: khulnasoft-csp-tm-db-config
+          image: registry.khulnasoft.com/database:2022.4
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 5432
+            timeoutSeconds: 5
+          name: khulnasoft-tm-db
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 5432
+            timeoutSeconds: 5
+          resources: {}
+          securityContext:
+            privileged: false
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-db
+      initContainers:
+        - command:
+            - sh
+            - -c
+            - '[ -f $PGDATA/server.key ] && chmod 600 $PGDATA/server.key || echo ''OK'' '
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: khulnasoft-tm-db
+          envFrom:
+            - configMapRef:
+                name: khulnasoft-csp-tm-db-config
+          image: registry.khulnasoft.com/database:2022.4
+          name: khulnasoft-tm-db-init
+          resources: {}
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-db
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 11433
+        runAsGroup: 70
+        runAsUser: 70
+      serviceAccount: khulnasoft-sa
+      serviceAccountName: khulnasoft-sa
+      volumes:
+        - name: postgres-db
+          persistentVolumeClaim:
+            claimName: khulnasoft-tm-db-pvc
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: khulnasoft-tenantmanager
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-tenantmanager
+spec:
+  ports:
+    - port: 8081
+      name: khulnasoft-tenantmanager
+      protocol: TCP
+      targetPort: 8081
+    - port: 443
+      name: khulnasoft-tenantmanager-ssl
+      protocol: TCP
+      targetPort: 8444
+  selector:
+    app: khulnasoft-tenantmanager
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: khulnasoft-tenantmanager
+  namespace: khulnasoft
+spec:
+  selector:
+    matchLabels:
+      app: khulnasoft-tenantmanager
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-tenantmanager
+      name: khulnasoft-tenantmanager
+    spec:
+      serviceAccount: khulnasoft-sa
+      securityContext:
+        runAsUser: 11431
+        runAsGroup: 11433
+        fsGroup: 11433
+      containers:
+      - name: khulnasoft-tenantmanager
+        image: registry.khulnasoft.com/tenantmanager:2022.4
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        env:
+        - name: KHULNASOFT_TM_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: khulnasoft-tm-db
+              key: password
+        - name: KHULNASOFT_TM_AUDIT_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: khulnasoft-tm-db
+              key: password
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-tenant-manager-config
+        ports:
+          - containerPort: 8081
+            protocol: TCP
+          - containerPort: 8444
+            protocol: TCP
+

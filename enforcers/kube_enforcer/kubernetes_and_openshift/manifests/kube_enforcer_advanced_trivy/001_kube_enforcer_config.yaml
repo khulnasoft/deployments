@@ -1,0 +1,1427 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ke-envoy-conf
+  namespace: khulnasoft
+data:
+  # Enable the below Env for mTLS between kube-enforcer and gateway
+  # KHULNASOFT_PUBLIC_KEY: "/opt/khulnasoft/ssl/khulnasoft_kube-enforcer.crt"
+  # KHULNASOFT_PRIVATE_KEY: "/opt/khulnasoft/ssl/khulnasoft_kube-enforcer.key"
+  # KHULNASOFT_ROOT_CA: "/opt/khulnasoft/ssl/rootCA.crt"
+  envoy.yaml: |
+    node:
+      cluster: k8s
+      id: <INSERT NODE ID>
+
+    dynamic_resources:
+      cds_config:
+        path: /etc/khulnasoft/envoy/cds.yaml
+        initial_fetch_timeout: 0s
+      lds_config:
+        path: /etc/envoy/lds.yaml
+  lds.yaml: |
+    resources:
+      - "@type": type.googleapis.com/envoy.config.listener.v3.Listener
+        name: listener_0
+        address:
+          socket_address:
+            address: 0.0.0.0
+            port_value: 8443
+        filter_chains:
+          - filters:
+              - name: envoy.filters.network.http_connection_manager
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                  stream_idle_timeout: 0s
+                  drain_timeout: 20s
+                  access_log:
+                    - name: envoy.access_loggers.file
+                      typed_config:
+                        "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+                        path: "/dev/stdout"
+                  codec_type: AUTO
+                  stat_prefix: ingress_https
+                  route_config:
+                    name: local_route
+                    virtual_hosts:
+                      - name: https
+                        domains:
+                          - "*"
+                        routes:
+                          - match:
+                              prefix: "/agent_grpc_channel.GWChannelV2/PushNotificationHandler"
+                              grpc: { }
+                            route:
+                              cluster: khulnasoft-kube-enforcer
+                              timeout: 0s
+                          - match:
+                              prefix: "/"
+                              grpc: { }
+                            route:
+                              cluster: khulnasoft-gateway
+                              timeout: 0s
+                          - match:
+                              prefix: "/"
+                            route:
+                              cluster: khulnasoft-kube-enforcer-k8s
+                              timeout: 0s
+
+                  http_filters:
+                    - name: envoy.filters.http.health_check
+                      typed_config:
+                        "@type": type.googleapis.com/envoy.config.filter.http.health_check.v2.HealthCheck
+                        pass_through_mode: false
+                        headers:
+                          - name: ":path"
+                            exact_match: "/healthz"
+                          - name: "x-envoy-livenessprobe"
+                            exact_match: "healthz"
+                    - name: envoy.filters.http.router
+                      typed_config: { }
+            transport_socket:
+              name: envoy.transport_sockets.tls
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+                common_tls_context:
+                  alpn_protocols: "h2,http/1.1"
+                  tls_certificates:
+                    - certificate_chain:
+                        filename: "/etc/ssl/envoy/server.crt"
+                      private_key:
+                        filename: "/etc/ssl/envoy/server.key"
+  cds.yaml: |
+    resources:
+    - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
+      name: khulnasoft-kube-enforcer
+      connect_timeout: 180s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      http2_protocol_options:
+        hpack_table_size: 4294967
+        max_concurrent_streams: 2147483647
+      circuit_breakers:
+        thresholds:
+          max_pending_requests: 2147483647
+          max_requests: 2147483647
+      load_assignment:
+        cluster_name: khulnasoft-kube-enforcer
+        endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: localhost
+                    port_value: 8442
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+          sni: khulnasoft-kube-enforcer
+    - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
+      name: khulnasoft-kube-enforcer-k8s
+      connect_timeout: 180s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      circuit_breakers:
+        thresholds:
+          max_pending_requests: 2147483647
+          max_requests: 2147483647
+      load_assignment:
+        cluster_name: khulnasoft-kube-enforcer-k8s
+        endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: localhost
+                    port_value: 8449
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+          sni: khulnasoft-kube-enforcer-k8s
+    - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
+      name: khulnasoft-gateway
+      connect_timeout: 180s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      lb_policy: ROUND_ROBIN
+      http2_protocol_options:
+        hpack_table_size: 4294967
+        max_concurrent_streams: 2147483647
+      circuit_breakers:
+        thresholds:
+          max_pending_requests: 2147483647
+          max_requests: 2147483647
+      load_assignment:
+        cluster_name: khulnasoft-gateway
+        endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: khulnasoft-gateway.khulnasoft
+                    port_value: 8443
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+          sni: khulnasoft-gateway
+  validation_context_sds_secret.yaml: |
+    resources:
+      - "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret"
+        name: "validation_context_sds"
+        validation_context:
+          trusted_ca:
+            filename: /etc/khulnasoft/envoy/ca-certificates.crt
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: kube-enforcer-admission-hook-config
+  namespace: khulnasoft
+webhooks:
+  - name: imageassurance.khulnasoft.com
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["*"]
+        apiVersions: ["*"]
+        resources:
+          - pods
+          - deployments
+          - replicasets
+          - replicationcontrollers
+          - statefulsets
+          - daemonsets
+          - jobs
+          - cronjobs
+          - configmaps
+          - services
+          - roles
+          - rolebindings
+          - clusterroles
+          - clusterrolebindings
+          - customresourcedefinitions
+    clientConfig:
+      # Please follow instruction in document to generate new CA cert
+      caBundle:
+      service:
+        namespace: khulnasoft
+        name: khulnasoft-kube-enforcer
+    timeoutSeconds: 2
+    failurePolicy: Ignore
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: "None"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: kube-enforcer-me-injection-hook-config
+  namespace: khulnasoft
+webhooks:
+  - name: microenforcer.khulnasoft.com
+    clientConfig:
+      service:
+        name: khulnasoft-kube-enforcer
+        namespace: khulnasoft
+        path: "/mutate"
+      caBundle:
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: ["*"]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+    timeoutSeconds: 2
+    failurePolicy: Ignore
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: "None"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: khulnasoft-kube-enforcer-sa
+  namespace: khulnasoft
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: khulnasoft-kube-enforcer
+rules:
+  - apiGroups: ["*"]
+    resources: ["pods", "nodes", "namespaces", "deployments", "jobs", "cronjobs", "daemonsets", "replicasets", "replicationcontrollers", "statefulsets", "clusterroles", "clusterrolebindings", "componentstatuses", "services" ]
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
+    - apps.openshift.io
+    resources:
+    - deploymentconfigs
+    verbs:
+    - get
+    - list
+    - watch  
+  - apiGroups: ["khulnasoft.github.io"]
+    resources: ["configauditreports", "clusterconfigauditreports"]
+    verbs: ["get", "list", "watch"]
+  #### Can be removed if your platform isn't Openshift
+  - apiGroups: [ "operator.openshift.io" ]
+    resources: [ "imagecontentsourcepolicies" ]
+    verbs: [ "get", "list", "watch" ]
+    ####
+  - apiGroups: ["*"]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
+      - "*"
+    resources:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "*"
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "*"
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+      # Comment the below 3 verbs if Pod-Enforcer injection is not going to be used
+      - create 
+      - update
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: khulnasoft-kube-enforcer
+subjects:
+  - kind: ServiceAccount
+    name: khulnasoft-kube-enforcer-sa
+    namespace: khulnasoft
+---
+# This role specific to kube-bench scans permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+rules:
+  - apiGroups: ["*"]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["*"]
+    resources: ["jobs"]
+    verbs: ["create", "delete"]
+  - apiGroups: ["*"]
+    resources: ["pods"]
+    verbs: ["create", "delete"]
+  - apiGroups: ["*"]
+    resources: ["leases"]
+    verbs: ["get", "list", "create", "update"]
+  - apiGroups: [ "*" ]
+    resources: [ "secrets" ]
+    verbs: ["create", "delete"]
+  - apiGroups: [ "*" ]
+    resources: [ "configmaps" ]
+    verbs: ["update", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: khulnasoft-kube-enforcer
+  namespace: khulnasoft
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: khulnasoft-kube-enforcer
+subjects:
+- kind: ServiceAccount
+  name: khulnasoft-kube-enforcer-sa
+  namespace: khulnasoft
+---
+###### Tunnel-Operator resource yamls################
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
+  name: clusterconfigauditreports.khulnasoft.github.io
+spec:
+  group: khulnasoft.github.io
+  names:
+    kind: ClusterConfigAuditReport
+    listKind: ClusterConfigAuditReportList
+    plural: clusterconfigauditreports
+    shortNames:
+      - clusterconfigaudit
+    singular: clusterconfigauditreport
+  scope: Cluster
+  versions:
+    - additionalPrinterColumns:
+        - description: The name of the config audit scanner
+          jsonPath: .report.scanner.name
+          name: Scanner
+          type: string
+        - description: The age of the report
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+        - description: The number of failed checks with critical severity
+          jsonPath: .report.summary.criticalCount
+          name: Critical
+          priority: 1
+          type: integer
+        - description: The number of failed checks with high severity
+          jsonPath: .report.summary.highCount
+          name: High
+          priority: 1
+          type: integer
+        - description: The number of failed checks with medium severity
+          jsonPath: .report.summary.mediumCount
+          name: Medium
+          priority: 1
+          type: integer
+        - description: The number of failed checks with low severity
+          jsonPath: .report.summary.lowCount
+          name: Low
+          priority: 1
+          type: integer
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: ClusterConfigAuditReport is a specification for the ClusterConfigAuditReport
+            resource.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                  of an object. Servers should convert recognized schemas to the latest
+                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                  object represents. Servers may infer this from the endpoint the client
+                  submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            report:
+              properties:
+                checks:
+                  description: Checks provides results of conducting audit steps.
+                  items:
+                    description: Check provides the result of conducting a single audit
+                      step.
+                    properties:
+                      category:
+                        type: string
+                      checkID:
+                        type: string
+                      description:
+                        type: string
+                      messages:
+                        items:
+                          type: string
+                        type: array
+                      remediation:
+                        description: Remediation provides description or links to external
+                          resources to remediate failing check.
+                        type: string
+                      scope:
+                        description: Scope indicates the section of config that was
+                          audited.
+                        properties:
+                          type:
+                            description: Type indicates type of this scope, e.g. Container,
+                              ConfigMapKey or JSONPath.
+                            type: string
+                          value:
+                            description: Value indicates value of this scope that depends
+                              on Type, e.g. container name, ConfigMap key or JSONPath
+                              expression
+                            type: string
+                        required:
+                          - type
+                          - value
+                        type: object
+                      severity:
+                        description: Severity level of a vulnerability or a configuration
+                          audit check.
+                        type: string
+                      success:
+                        type: boolean
+                      title:
+                        type: string
+                    required:
+                      - checkID
+                      - severity
+                      - success
+                    type: object
+                  type: array
+                scanner:
+                  description: Scanner is the spec for a scanner generating a security
+                    assessment report.
+                  properties:
+                    name:
+                      description: Name the name of the scanner.
+                      type: string
+                    vendor:
+                      description: Vendor the name of the vendor providing the scanner.
+                      type: string
+                    version:
+                      description: Version the version of the scanner.
+                      type: string
+                  required:
+                    - name
+                    - vendor
+                    - version
+                  type: object
+                summary:
+                  description: ConfigAuditSummary counts failed checks by severity.
+                  properties:
+                    criticalCount:
+                      description: CriticalCount is the number of failed checks with
+                        critical severity.
+                      type: integer
+                    highCount:
+                      description: HighCount is the number of failed checks with high
+                        severity.
+                      type: integer
+                    lowCount:
+                      description: LowCount is the number of failed check with low severity.
+                      type: integer
+                    mediumCount:
+                      description: MediumCount is the number of failed checks with medium
+                        severity.
+                      type: integer
+                  required:
+                    - criticalCount
+                    - highCount
+                    - lowCount
+                    - mediumCount
+                  type: object
+                updateTimestamp:
+                  format: date-time
+                  type: string
+              required:
+                - checks
+              type: object
+          required:
+            - report
+          type: object
+      served: true
+      storage: true
+      subresources: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
+  name: clusterrbacassessmentreports.khulnasoft.github.io
+spec:
+  group: khulnasoft.github.io
+  names:
+    kind: ClusterRbacAssessmentReport
+    listKind: ClusterRbacAssessmentReportList
+    plural: clusterrbacassessmentreports
+    shortNames:
+      - clusterrbacassessmentreport
+    singular: clusterrbacassessmentreport
+  scope: Cluster
+  versions:
+    - additionalPrinterColumns:
+        - description: The name of the rbac assessment scanner
+          jsonPath: .report.scanner.name
+          name: Scanner
+          type: string
+        - description: The age of the report
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+        - description: The number of failed checks with critical severity
+          jsonPath: .report.summary.criticalCount
+          name: Critical
+          priority: 1
+          type: integer
+        - description: The number of failed checks with high severity
+          jsonPath: .report.summary.highCount
+          name: High
+          priority: 1
+          type: integer
+        - description: The number of failed checks with medium severity
+          jsonPath: .report.summary.mediumCount
+          name: Medium
+          priority: 1
+          type: integer
+        - description: The number of failed checks with low severity
+          jsonPath: .report.summary.lowCount
+          name: Low
+          priority: 1
+          type: integer
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: ClusterRbacAssessmentReport is a specification for the ClusterRbacAssessmentReport
+            resource.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                  of an object. Servers should convert recognized schemas to the latest
+                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                  object represents. Servers may infer this from the endpoint the client
+                  submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            report:
+              properties:
+                checks:
+                  description: Checks provides results of conducting audit steps.
+                  items:
+                    description: Check provides the result of conducting a single audit
+                      step.
+                    properties:
+                      category:
+                        type: string
+                      checkID:
+                        type: string
+                      description:
+                        type: string
+                      messages:
+                        items:
+                          type: string
+                        type: array
+                      remediation:
+                        description: Remediation provides description or links to external
+                          resources to remediate failing check.
+                        type: string
+                      scope:
+                        description: Scope indicates the section of config that was
+                          audited.
+                        properties:
+                          type:
+                            description: Type indicates type of this scope, e.g. Container,
+                              ConfigMapKey or JSONPath.
+                            type: string
+                          value:
+                            description: Value indicates value of this scope that depends
+                              on Type, e.g. container name, ConfigMap key or JSONPath
+                              expression
+                            type: string
+                        required:
+                          - type
+                          - value
+                        type: object
+                      severity:
+                        description: Severity level of a vulnerability or a configuration
+                          audit check.
+                        type: string
+                      success:
+                        type: boolean
+                      title:
+                        type: string
+                    required:
+                      - checkID
+                      - severity
+                      - success
+                    type: object
+                  type: array
+                scanner:
+                  description: Scanner is the spec for a scanner generating a security
+                    assessment report.
+                  properties:
+                    name:
+                      description: Name the name of the scanner.
+                      type: string
+                    vendor:
+                      description: Vendor the name of the vendor providing the scanner.
+                      type: string
+                    version:
+                      description: Version the version of the scanner.
+                      type: string
+                  required:
+                    - name
+                    - vendor
+                    - version
+                  type: object
+                summary:
+                  description: RbacAssessmentSummary counts failed checks by severity.
+                  properties:
+                    criticalCount:
+                      description: CriticalCount is the number of failed checks with
+                        critical severity.
+                      type: integer
+                    highCount:
+                      description: HighCount is the number of failed checks with high
+                        severity.
+                      type: integer
+                    lowCount:
+                      description: LowCount is the number of failed check with low severity.
+                      type: integer
+                    mediumCount:
+                      description: MediumCount is the number of failed checks with medium
+                        severity.
+                      type: integer
+                  required:
+                    - criticalCount
+                    - highCount
+                    - lowCount
+                    - mediumCount
+                  type: object
+              required:
+                - checks
+                - scanner
+                - summary
+              type: object
+          required:
+            - report
+          type: object
+      served: true
+      storage: true
+      subresources: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
+  name: configauditreports.khulnasoft.github.io
+spec:
+  group: khulnasoft.github.io
+  names:
+    kind: ConfigAuditReport
+    listKind: ConfigAuditReportList
+    plural: configauditreports
+    shortNames:
+      - configaudit
+      - configaudits
+    singular: configauditreport
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - description: The name of the config audit scanner
+          jsonPath: .report.scanner.name
+          name: Scanner
+          type: string
+        - description: The age of the report
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+        - description: The number of failed checks with critical severity
+          jsonPath: .report.summary.criticalCount
+          name: Critical
+          priority: 1
+          type: integer
+        - description: The number of failed checks with high severity
+          jsonPath: .report.summary.highCount
+          name: High
+          priority: 1
+          type: integer
+        - description: The number of failed checks with medium severity
+          jsonPath: .report.summary.mediumCount
+          name: Medium
+          priority: 1
+          type: integer
+        - description: The number of failed checks with low severity
+          jsonPath: .report.summary.lowCount
+          name: Low
+          priority: 1
+          type: integer
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: ConfigAuditReport is a specification for the ConfigAuditReport
+            resource.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                  of an object. Servers should convert recognized schemas to the latest
+                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                  object represents. Servers may infer this from the endpoint the client
+                  submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            report:
+              properties:
+                checks:
+                  description: Checks provides results of conducting audit steps.
+                  items:
+                    description: Check provides the result of conducting a single audit
+                      step.
+                    properties:
+                      category:
+                        type: string
+                      checkID:
+                        type: string
+                      description:
+                        type: string
+                      messages:
+                        items:
+                          type: string
+                        type: array
+                      remediation:
+                        description: Remediation provides description or links to external
+                          resources to remediate failing check.
+                        type: string
+                      scope:
+                        description: Scope indicates the section of config that was
+                          audited.
+                        properties:
+                          type:
+                            description: Type indicates type of this scope, e.g. Container,
+                              ConfigMapKey or JSONPath.
+                            type: string
+                          value:
+                            description: Value indicates value of this scope that depends
+                              on Type, e.g. container name, ConfigMap key or JSONPath
+                              expression
+                            type: string
+                        required:
+                          - type
+                          - value
+                        type: object
+                      severity:
+                        description: Severity level of a vulnerability or a configuration
+                          audit check.
+                        type: string
+                      success:
+                        type: boolean
+                      title:
+                        type: string
+                    required:
+                      - checkID
+                      - severity
+                      - success
+                    type: object
+                  type: array
+                scanner:
+                  description: Scanner is the spec for a scanner generating a security
+                    assessment report.
+                  properties:
+                    name:
+                      description: Name the name of the scanner.
+                      type: string
+                    vendor:
+                      description: Vendor the name of the vendor providing the scanner.
+                      type: string
+                    version:
+                      description: Version the version of the scanner.
+                      type: string
+                  required:
+                    - name
+                    - vendor
+                    - version
+                  type: object
+                summary:
+                  description: ConfigAuditSummary counts failed checks by severity.
+                  properties:
+                    criticalCount:
+                      description: CriticalCount is the number of failed checks with
+                        critical severity.
+                      type: integer
+                    highCount:
+                      description: HighCount is the number of failed checks with high
+                        severity.
+                      type: integer
+                    lowCount:
+                      description: LowCount is the number of failed check with low severity.
+                      type: integer
+                    mediumCount:
+                      description: MediumCount is the number of failed checks with medium
+                        severity.
+                      type: integer
+                  required:
+                    - criticalCount
+                    - highCount
+                    - lowCount
+                    - mediumCount
+                  type: object
+                updateTimestamp:
+                  format: date-time
+                  type: string
+              required:
+                - checks
+              type: object
+          required:
+            - report
+          type: object
+      served: true
+      storage: true
+      subresources: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
+  name: rbacassessmentreports.khulnasoft.github.io
+spec:
+  group: khulnasoft.github.io
+  names:
+    kind: RbacAssessmentReport
+    listKind: RbacAssessmentReportList
+    plural: rbacassessmentreports
+    shortNames:
+      - rbacassessment
+      - rbacassessments
+    singular: rbacassessmentreport
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - description: The name of the rbac assessment scanner
+          jsonPath: .report.scanner.name
+          name: Scanner
+          type: string
+        - description: The age of the report
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+        - description: The number of failed checks with critical severity
+          jsonPath: .report.summary.criticalCount
+          name: Critical
+          priority: 1
+          type: integer
+        - description: The number of failed checks with high severity
+          jsonPath: .report.summary.highCount
+          name: High
+          priority: 1
+          type: integer
+        - description: The number of failed checks with medium severity
+          jsonPath: .report.summary.mediumCount
+          name: Medium
+          priority: 1
+          type: integer
+        - description: The number of failed checks with low severity
+          jsonPath: .report.summary.lowCount
+          name: Low
+          priority: 1
+          type: integer
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: RbacAssessmentReport is a specification for the RbacAssessmentReport
+            resource.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                  of an object. Servers should convert recognized schemas to the latest
+                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                  object represents. Servers may infer this from the endpoint the client
+                  submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            report:
+              properties:
+                checks:
+                  description: Checks provides results of conducting audit steps.
+                  items:
+                    description: Check provides the result of conducting a single audit
+                      step.
+                    properties:
+                      category:
+                        type: string
+                      checkID:
+                        type: string
+                      description:
+                        type: string
+                      messages:
+                        items:
+                          type: string
+                        type: array
+                      remediation:
+                        description: Remediation provides description or links to external
+                          resources to remediate failing check.
+                        type: string
+                      scope:
+                        description: Scope indicates the section of config that was
+                          audited.
+                        properties:
+                          type:
+                            description: Type indicates type of this scope, e.g. Container,
+                              ConfigMapKey or JSONPath.
+                            type: string
+                          value:
+                            description: Value indicates value of this scope that depends
+                              on Type, e.g. container name, ConfigMap key or JSONPath
+                              expression
+                            type: string
+                        required:
+                          - type
+                          - value
+                        type: object
+                      severity:
+                        description: Severity level of a vulnerability or a configuration
+                          audit check.
+                        type: string
+                      success:
+                        type: boolean
+                      title:
+                        type: string
+                    required:
+                      - checkID
+                      - severity
+                      - success
+                    type: object
+                  type: array
+                scanner:
+                  description: Scanner is the spec for a scanner generating a security
+                    assessment report.
+                  properties:
+                    name:
+                      description: Name the name of the scanner.
+                      type: string
+                    vendor:
+                      description: Vendor the name of the vendor providing the scanner.
+                      type: string
+                    version:
+                      description: Version the version of the scanner.
+                      type: string
+                  required:
+                    - name
+                    - vendor
+                    - version
+                  type: object
+                summary:
+                  description: RbacAssessmentSummary counts failed checks by severity.
+                  properties:
+                    criticalCount:
+                      description: CriticalCount is the number of failed checks with
+                        critical severity.
+                      type: integer
+                    highCount:
+                      description: HighCount is the number of failed checks with high
+                        severity.
+                      type: integer
+                    lowCount:
+                      description: LowCount is the number of failed check with low severity.
+                      type: integer
+                    mediumCount:
+                      description: MediumCount is the number of failed checks with medium
+                        severity.
+                      type: integer
+                  required:
+                    - criticalCount
+                    - highCount
+                    - lowCount
+                    - mediumCount
+                  type: object
+              required:
+                - checks
+                - scanner
+                - summary
+              type: object
+          required:
+            - report
+          type: object
+      served: true
+      storage: true
+      subresources: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tunnel-operator-tunnel-config
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+data:
+  tunnel.repository: "ghcr.io/khulnasoft/tunnel"
+  tunnel.tag: "0.36.0"
+  tunnel.additionalVulnerabilityReportFields: ""
+  tunnel.severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+  tunnel.slow: "true"
+  tunnel.dbRepository: "ghcr.io/khulnasoft/tunnel-db"
+  tunnel.command: "image"
+  tunnel.dbRepositoryInsecure: "false"
+  tunnel.useBuiltinRegoPolicies: "false"
+  tunnel.supportedConfigAuditKinds: "Workload,Service,Role,RoleBinding,ClusterRole,ClusterRoleBinding,NetworkPolicy,Ingress,LimitRange,ResourceQuota,ConfigMap"
+  tunnel.timeout: "5m0s"
+  tunnel.mode: "Standalone"
+  tunnel.resources.requests.cpu: 100m
+  tunnel.resources.requests.memory: 100M
+  tunnel.resources.limits.cpu: 500m
+  tunnel.resources.limits.memory: 500M
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tunnel-operator
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+data:
+  scanJob.podTemplateContainerSecurityContext: "{\"allowPrivilegeEscalation\":false,\"capabilities\":{\"drop\":[\"ALL\"]},\"privileged\":false,\"readOnlyRootFilesystem\":true}"
+  scanJob.compressLogs: "true"
+  vulnerabilityReports.scanner: "Tunnel"
+  configAuditReports.scanner: "Tunnel"
+  report.recordFailedChecksOnly: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tunnel-operator-tunnel-config
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+data:
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tunnel-operator-policies-config
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tunnel-operator
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: tunnel-operator
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - limitranges
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - ""
+    resources:
+      - replicationcontrollers
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - resourcequotas
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps.openshift.io
+    resources:
+      - deploymentconfigs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - khulnasoft.github.io
+    resources:
+      - clusterconfigauditreports
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - khulnasoft.github.io
+    resources:
+      - clusterrbacassessmentreports
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - khulnasoft.github.io
+    resources:
+      - configauditreports
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - khulnasoft.github.io
+    resources:
+      - rbacassessmentreports
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - cronjobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - clusterrolebindings
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - clusterroles
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - rolebindings
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - roles
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tunnel-operator
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tunnel-operator
+subjects:
+  - kind: ServiceAccount
+    name: tunnel-operator
+    namespace: khulnasoft
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tunnel-operator
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+      - get
+      - delete
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tunnel-operator
+  namespace: khulnasoft
+  labels:
+    app.kubernetes.io/name: tunnel-operator
+    app.kubernetes.io/instance: tunnel-operator
+    app.kubernetes.io/version: "0.16.1"
+    app.kubernetes.io/managed-by: kubectl
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tunnel-operator
+subjects:
+  - kind: ServiceAccount
+    name: tunnel-operator
+    namespace: khulnasoft
+---

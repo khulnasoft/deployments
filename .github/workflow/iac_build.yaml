@@ -1,0 +1,25 @@
+name: build
+on:
+  push:
+    branches:
+      - 2022.4
+  pull_request:
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Run Tunnel vulnerability scanner in IaC mode
+        uses: khulnasoft/tunnel-action@master
+        with:
+          scan-type: 'config'
+          hide-progress: false
+          format: 'table'
+          exit-code: '1'
+        env:
+          KHULNASOFT_KEY: ${{ secrets.KHULNASOFT_KEY }}
+          KHULNASOFT_SECRET: ${{ secrets.KHULNASOFT_SECRET }}
+          TUNNEL_RUN_AS_PLUGIN: 'khulnasoft'

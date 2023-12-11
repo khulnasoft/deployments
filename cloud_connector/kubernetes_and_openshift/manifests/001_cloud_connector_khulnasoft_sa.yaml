@@ -1,0 +1,11 @@
+apiVersion: v1
+imagePullSecrets:
+- name: khulnasoft-registry
+kind: ServiceAccount
+metadata:
+  annotations:
+    description: Service account for pulling Khulnasoft images and for Khulnasoft privileged
+  labels:
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-sa
+  namespace: khulnasoft

@@ -1,0 +1,87 @@
+:version: 2022.4
+:imageVersion: 2022.4
+
+= Deploy Khulnasoft Enforcer on AWS ECS Cluster
+
+image:https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png[Launch Stack,link=https://console.aws.amazon.com/cloudformation/home?#/stacks/new?stackName=khulnasoft-ecs&templateURL=https://s3.amazonaws.com/khulnasoft-security-public/{version}/khulnasoftEnforcer.yaml]
+
+== Overview
+
+The Khulnasoft Server and Gateway are deployed on a ECS EC2 cluster. In multi-cluster environments, you can deploy Khulnasoft Enforcers on different clusters.
+
+This page contains instructions for deploying Khulnasoft Enforcer on any Amazon ECS EC2 cluster.
+
+For high availability, you must deploy Khulnasoft on 2 availability Zones (AZs).
+
+Your deployment creates the Khulnasoft Enforcer service, on the specific ECS instance. A CloudFormation template is used to deploy Khulnasoft Enforcer. This can be done either with the AWS CloudFormation Management Console or the AWS Command Line interface (CLI), as explained below.
+
+== Prerequisites
+
+- One or more ECS clusters
+- Khulnasoft Gateway (existing) service DNS/IP
+- From Khulnasoft Security: your Khulnasoft credentials (username and password) and Khulnasoft Enterprise License Token
+- Khulnasoft Enforcer Group Token
+- If the default capacity provider strategy is configured as AGS in AWS ECS, use launch type as EC2 in deployment method.          
+          # LaunchType: EC2
+
+== Pre-deployment
+
+*Step 1. Login to the Khulnasoft Registry with your credentials.*
+
+[source,options="nowrap",subs="attributes"]
+----
+ docker login registry.khulnasoft.com -u <KHULNASOFT_USERNAME> -p <KHULNASOFT_PASSWORD>
+----
+
+*Step 2. Pull the Khulnasoft Enforcer image.*
+
+[source,options="nowrap",subs="attributes"]
+----
+ docker pull registry.khulnasoft.com/enforcer:{imageVersion}
+----
+
+*Step 3. Push the enforcer image to ECR.*
+
+== Deployment method 1: CloudFormation Management Console
+
+*Step 1. Click the Launch Stack icon at the top of this page.* This will take you to the *Create stack* function of the AWS CloudFormation Management Console.
+
+*Step 2. Ensure that your AWS region is set to where you want to deploy Khulnasoft Enforcer.*
+
+*Step 3. Click Next.*
+
+*Step 4. Set or modify any of the parameters as explained below.*
+
+*Step 5. Click Next to create the stack.*
+
+== Deployment method 2: CLI
+
+*Step 1. Copy the following command.*
+
+[source,options="nowrap",subs="attributes"]
+----
+aws –region us-east-1 cloudformation create-stack –capabilities CAPABILITY_NAMED_IAM –stack-name khulnasoft-ec2 –template-body file://khulnasoftEnforcer.yaml \
+–parameters ParameterKey=KhulnasoftGatewayAddress,ParameterValue=xxxxx \
+ParameterKey=KhulnasoftToken,ParameterValue=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxx \
+ParameterKey=KhulnasoftEnforcerImage,ParameterValue=xxxx.dkr.ecr.us-east-1.amazonaws.com/khulnasoft:enforcer-x.x\
+ParameterKey=ECSClusterName,ParameterValue=xxxxx \
+ParameterKey=TaskPrivileged,ParameterValue=false
+----
+
+*Step 2. Set the parameters as explained below.*
+
+[source,options="nowrap",subs="attributes"]
+----
+KhulnasoftGatewayAddress = The Gateway Service DNS name or IP address (IP address with port number)
+KhulnasoftToken = Token from existing Khulnasoft Enforcer group of the Khulnasoft Server
+TaskPrivileged = Select Yes to run the Enforcer in priviliged mode or false to run in non-privilged mode
+KhulnasoftEnforcerImage = The ECR path for the Khulnasoft Enforcer product image
+ECSClusterName = The existing ECS cluster name
+----
+
+*Step 3. Run the AWS create-stack CLI command.*
+
+This procedure will deploy Khulnasoft Enforcer in your desired cluster and the newly deployed Khulnasoft enforcer will get added to the existing Khulnasoft server.
+
+## Special cases
+* The ECS cluster with the Bottlerocket OS is currently not supported.

@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: khulnasoft-windows-agent
+    khulnasoft.component: enforcer
+  name: khulnasoft-windows-agent
+  namespace: khulnasoft
+spec:
+  selector:
+    matchLabels:
+      app: khulnasoft-windows-agent
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-windows-agent
+        khulnasoft.component: windows-enforcer
+      name: khulnasoft-windows-agent
+      namespace: khulnasoft
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/khulnasoft-windows-agent: unconfined
+    spec:
+      containers:
+      - env:
+        - name: KHULNASOFT_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: KHULNASOFT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: windows-enforcer-token
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-windows-enforcer
+        image: registry.khulnasoft.com/windows-enforcer:2022.4
+        command:
+        - powershell.exe
+        - -command
+        - $argList=@("/I","KhulnasoftAgentWindowsInstaller.msi","/qn","/L KhulnasoftAgentWindowsInstaller.install.log");
+        - $sysEnv=@(Get-ChildItem -Path Env:) | ForEach { $argList+=$_.Name+'="'+$_.Value+'"' };
+        - $Process=Start-Process -FilePath msiexec.exe -ArgumentList $argList -NoNewWindow -PassThru -Wait;
+        - Get-Content KhulnasoftAgentWindowsInstaller.install.log;
+        - While (Get-Service slkd | Where-Object {$_.Status -eq "Running"}){ Start-Sleep -s 30 }
+        imagePullPolicy: Always
+#        resources:
+#          limits:
+#            cpu: 1000m
+#            memory: 1.5Gi
+#          requests:
+#            cpu: 350m
+#            memory: 512Mi
+        startupProbe:
+          exec:
+            command: 
+            - powershell.exe
+            - -c
+            - Get-Service -Name slkd
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        livenessProbe:
+          exec:
+            command: 
+            - powershell.exe
+            - -c
+            - Get-Service -Name slkd
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          exec:
+            command: 
+            - powershell.exe
+            - -c
+            - Get-Service -Name slkd  | Where-Object {$_.Status -eq "Running"}
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        lifecycle:
+          preStop:
+            exec:
+              command: 
+              - powershell.exe
+              - -command
+              - $argList=@("/X","KhulnasoftAgentWindowsInstaller.msi","/qn","/L c:\c\KhulnasoftAgentWindowsInstaller.remove.log","/norestart","MSIRESTARTMANAGERCONTROL=Disable");
+              - $Process=Start-Process -FilePath msiexec.exe -ArgumentList $argList -NoNewWindow -PassThru -Wait;
+        name: khulnasoft-windows-agent
+        securityContext:
+          windowsOptions:
+            hostProcess: true
+            runAsUserName: "NT AUTHORITY\\SYSTEM"
+      nodeSelector:
+        kubernetes.io/os: windows
+      hostNetwork: true
+      dnsPolicy: ClusterFirst
+      hostPID: true
+      imagePullSecrets:
+       - name: khulnasoft-registry
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccount: khulnasoft-sa
+      serviceAccountName: khulnasoft-sa
+      terminationGracePeriodSeconds: 180
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate

@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-upgrade
+  namespace: khulnasoft
+spec:
+  template:
+    metadata:
+      labels:
+        app: test-upgrade
+      name: test-upgrade
+    spec:
+      serviceAccount: khulnasoft-sa
+      imagePullSecrets:
+      - name: khulnasoft-registry
+      containers:
+      - name: test-upgrade
+        image: registry.khulnasoft.com/console:2022.4
+        command: ["/opt/khulnasoft/sedockweb"]
+        args: ["test-upgrade"]
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-test-upgrade-config
+        env:
+        - name: SCALOCK_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+        - name: SCALOCK_AUDIT_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-audit-db
+      restartPolicy: Never
+      

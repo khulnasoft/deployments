@@ -1,0 +1,77 @@
+apiVersion: apps/v1 
+kind: Deployment 
+metadata: 
+  labels: 
+    app: khulnasoft-cloud-connector 
+  name: khulnasoft-cloud-connector 
+  namespace: khulnasoft 
+spec: 
+  replicas: 1 
+  selector: 
+    matchLabels: 
+      app: khulnasoft-cloud-connector 
+  template: 
+    metadata: 
+      labels: 
+        app: khulnasoft-cloud-connector 
+      name: khulnasoft-cloud-connector 
+      namespace: khulnasoft 
+    spec: 
+      containers: 
+      - env: 
+        - name: KHULNASOFT_SERVER 
+          value: "<gw_url>:443"
+        - name: KHULNASOFT_CLOUD_CONNECTOR_CONFIG_FILE_PATH 
+          value: /etc/config/connector.yaml 
+        - name: KHULNASOFT_CLOUD_CONNECTOR_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: user-secret
+        - name: KHULNASOFT_CLOUD_CONNECTOR_PASSWORD
+          valueFrom: 
+            secretKeyRef: 
+              key: password 
+              name: user-secret
+        ## Mandatory for SaaS Environments:
+        #- name: KHULNASOFT_CLOUD_CONNECTOR_TOKEN
+        #  valueFrom:
+        #    secretKeyRef:
+        #      key: token
+        #      name: user-secret
+
+        - name: KHULNASOFT_CLOUD_CONNECTOR_HEALTH_PORT # Default port is 8080 
+          value: ""
+        - name: KHULNASOFT_TLS_VERIFY
+          value: "1"
+        image: registry.khulnasoft.com/khulnasoft-cloud-connector:2022.4
+        imagePullPolicy: Always 
+        name: khulnasoft-cloud-connector 
+        terminationMessagePath: /dev/termination-log 
+        terminationMessagePolicy: File 
+        livenessProbe: 
+          httpGet: 
+            path: /health 
+            port: 8080 
+        volumeMounts: 
+          - name: config 
+            mountPath: /etc/config 
+      volumes: 
+        - name: config 
+          configMap: 
+            name: khulnasoft-cloud-connector-conf 
+            items: 
+              - path: connector.yaml 
+                key: khulnasoft-cloud-connector-config 
+      dnsPolicy: ClusterFirst 
+      imagePullSecrets: 
+      - name: khulnasoft-registry 
+      restartPolicy: Always 
+      schedulerName: default-scheduler 
+      securityContext: 
+        runAsUser: 11431 
+        runAsGroup: 11433 
+        fsGroup: 11433 
+      serviceAccount: khulnasoft-sa 
+      serviceAccountName: khulnasoft-sa 
+      terminationGracePeriodSeconds: 30

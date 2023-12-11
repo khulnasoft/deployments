@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: khulnasoft-csp-windows-enforcer
+  namespace: khulnasoft
+data:
+  KHULNASOFT_SERVER: ""
+  KHULNASOFT_ENFORCER_TYPE: "full"

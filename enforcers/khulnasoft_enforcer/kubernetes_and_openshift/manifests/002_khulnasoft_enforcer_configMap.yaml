@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: khulnasoft-csp-enforcer
+  namespace: khulnasoft
+data:
+  KHULNASOFT_HEALTH_MONITOR_ENABLED: "true"
+  KHULNASOFT_INSTALL_PATH: "/var/lib/khulnasoft"
+  KHULNASOFT_SERVER: "khulnasoft-gateway:8443"
+  RESTART_CONTAINERS: "no"
+  KHULNASOFT_LOGICAL_NAME: ""
+  KHULNASOFT_EXPRESS_MODE: "false"        # Change to true, to enable express mode deployment of enforcer
+  # KHULNASOFT_PUBLIC_KEY: "/opt/khulnasoft/ssl/khulnasoft_enforcer.crt"
+  # KHULNASOFT_PRIVATE_KEY: "/opt/khulnasoft/ssl/khulnasoft_enforcer.key"
+  # KHULNASOFT_ROOT_CA: "/opt/khulnasoft/ssl/rootCA.crt"
+  # KHULNASOFT_OCP_FULL_VERSION: <OCP version> #set this variable with the exact OCP version to allow accurate vulnerability scanning

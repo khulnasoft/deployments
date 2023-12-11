@@ -1,0 +1,174 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: khulnasoft-agent
+    khulnasoft.component: enforcer
+  name: khulnasoft-agent
+  namespace: khulnasoft
+spec:
+  selector:
+    matchLabels:
+      app: khulnasoft-agent
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-agent
+        khulnasoft.component: enforcer
+      name: khulnasoft-agent
+      namespace: khulnasoft
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/khulnasoft-agent: unconfined
+    spec:
+      containers:
+      - env:
+        - name: KHULNASOFT_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: KHULNASOFT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: enforcer-token
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-enforcer
+        image: registry.khulnasoft.com/enforcer:2022.4
+        imagePullPolicy: Always
+#        resources:
+#          limits:
+#            cpu: 1000m
+#            memory: 1.5Gi
+#          requests:
+#            cpu: 350m
+#            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8096
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /readinessz
+            port: 8096
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        ports:
+        - containerPort: 8096
+          protocol: TCP
+        name: khulnasoft-agent
+        securityContext:
+          privileged: false
+          # For aws-bottlerocket set privileged: true and uncomment section below
+          # seLinuxOptions:
+          #   user: system_u
+          #   role: system_r
+          #   type: super_t
+          #   level: s0
+          capabilities:
+              add:
+                - SYS_ADMIN
+                - NET_ADMIN
+                - NET_RAW
+                - SYS_PTRACE
+                - KILL
+                - MKNOD
+                - SETGID
+                - SETUID
+                - SYS_MODULE
+                - AUDIT_CONTROL
+                - SYSLOG
+                - SYS_CHROOT
+                - SYS_RESOURCE
+                - IPC_LOCK
+                - LINUX_IMMUTABLE
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/run
+          name: var-run
+        - mountPath: /dev
+          name: dev
+        - mountPath: /host/sys
+          name: sys
+          readOnly: true
+        - mountPath: /host/proc
+          name: proc
+          readOnly: true
+        - mountPath: /host/etc
+          name: etc
+          readOnly: true
+        - mountPath: /host/opt/khulnasoft
+          name: khulnasoft
+          readOnly: true
+        - mountPath: /opt/khulnasoft/tmp
+          name: khulnasoft-tmp
+        - mountPath: /opt/khulnasoft/audit
+          name: khulnasoft-audit
+        - mountPath: /data
+          name: khulnasoft-data
+        - mountPath: /var/lib/containers
+          name: containers
+        # - mountPath: /opt/khulnasoft/ssl
+        #   name: khulnasoft-grpc-enforcer
+      dnsPolicy: ClusterFirst
+      hostPID: true
+      imagePullSecrets:
+      - name: khulnasoft-registry
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccount: khulnasoft-sa
+      serviceAccountName: khulnasoft-sa
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - hostPath:
+          path: /var/run
+          type: ""
+        name: var-run
+      - hostPath:
+          path: /dev
+          type: ""
+        name: dev
+      - hostPath:
+          path: /sys
+          type: ""
+        name: sys
+      - hostPath:
+          path: /proc
+          type: ""
+        name: proc
+      - hostPath:
+          path: /etc
+          type: ""
+        name: etc
+      - hostPath:
+          path: /var/lib/khulnasoft
+          type: ""
+        name: khulnasoft
+      - hostPath:
+          path: /var/lib/khulnasoft/tmp
+          type: ""
+        name: khulnasoft-tmp
+      - hostPath:
+          path: /var/lib/khulnasoft/audit
+          type: ""
+        name: khulnasoft-audit
+      - hostPath:
+          path: /var/lib/khulnasoft/data
+          type: ""
+        name: khulnasoft-data
+      - hostPath:
+          path: /var/lib/containers
+          type: ""
+        name: containers
+
+      # - name: khulnasoft-grpc-enforcer
+      #   secret:
+      #     secretName: khulnasoft-grpc-enforcer
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate

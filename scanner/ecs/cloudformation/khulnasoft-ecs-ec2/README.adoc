@@ -1,0 +1,85 @@
+:version: 2022.4
+:imageVersion: 2022.4
+
+= Deploy Khulnasoft Scanner on AWS ECS Cluster
+
+image:https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png[Launch Stack,link=https://console.aws.amazon.com/cloudformation/home?#/stacks/new?stackName=khulnasoft-ecs&templateURL=https://s3.amazonaws.com/khulnasoft-security-public/{version}/khulnasoftScannerToken.yaml]
+
+== Overview
+
+The Khulnasoft Server and Gateway are deployed on a ECS EC2 cluster. In multi-cluster environments, you can deploy Khulnasoft Scanners on different clusters.
+
+This page contains instructions for deploying Khulnasoft Scanner on any Amazon ECS EC2 cluster.
+
+For high availability, you must deploy Khulnasoft on 2 availability Zones (AZs).
+
+Your deployment creates the Khulnasoft Scanner service, on the specific ECS instance. A CloudFormation template is used to deploy Khulnasoft Scanner. This can be done either with the AWS CloudFormation Management Console or the AWS Command Line interface (CLI), as explained below.
+
+*Note:* It is mandatory to use *khulnasoftScannerToken.yaml* for *SaaS* environments due to token based authentication, for *On-Prem* environments the khulnasoftScanner.yaml option is suitable, due to lack of token based authentication.
+
+
+== Prerequisites
+
+- One or more ECS clusters
+- Khulnasoft Server DNS/IP
+- From Khulnasoft Security: your Khulnasoft credentials (username and password) and CSP License Token
+- Khulnasoft Scanner Token or Username and Password (for Username Password please use khulnasoftScanner.yaml manifest)
+
+== Pre-deployment
+
+*Step 1. Login to the Khulnasoft Registry with your credentials.*
+
+[source,options="nowrap",subs="attributes"]
+----
+ docker login registry.khulnasoft.com -u <KHULNASOFT_USERNAME> -p <KHULNASOFT_PASSWORD>
+----
+
+*Step 2. Pull the Khulnasoft Scanner image.*
+
+[source,options="nowrap",subs="attributes"]
+----
+ docker pull registry.khulnasoft.com/scanner:{imageVersion}
+----
+
+*Step 3. Push the scanner image to ECR.*
+
+== Deployment method 1: CloudFormation Management Console
+
+*Step 1. Click the Launch Stack icon at the top of this page.* This will take you to the *Create stack* function of the AWS CloudFormation Management Console.
+
+*Step 2. Ensure that your AWS region is set to where you want to deploy Khulnasoft Scanner.*
+
+*Step 3. Click Next.*
+
+*Step 4. Set or modify any of the parameters as explained below.*
+
+*Step 5. Click Next to create the stack.*
+
+== Deployment method 2: CLI
+
+*Step 1. Copy the following command.*
+
+[source,options="nowrap",subs="attributes"]
+----
+aws –region us-east-1 cloudformation create-stack –capabilities CAPABILITY_NAMED_IAM –stack-name khulnasoft-scanner –template-body file://khulnasoftScanner.yaml \
+–parameters ParameterKey=KhulnasoftServerAddress,ParameterValue=xxxxx \
+ParameterKey=KhulnasoftScannerUserName,ParameterValue=xxxxx \
+ParameterKey=KhulnasoftScannerPassword,ParameterValue=xxxxx \
+ParameterKey=KhulnasoftScannerImage,ParameterValue=xxxx.dkr.ecr.us-east-1.amazonaws.com/khulnasoft:scanner-x.x\
+ParameterKey=ECSClusterName,ParameterValue=xxxxx
+----
+
+*Step 2. Set the parameters as explained below.*
+
+[source,options="nowrap",subs="attributes"]
+----
+KhulnasoftServerAddress = The Server DNS name or IP address (IP address with port number)
+KhulnasoftScannerUserName = The Scanner user name from Khulnasoft server
+KhulnasoftScannerPassword = The Scanner user Password
+KhulnasoftScannerImage = The ECR path for the Khulnasoft Scanner product image
+ECSClusterName = The existing ECS cluster name
+----
+
+*Step 3. Run the AWS create-stack CLI command.*
+
+This procedure will deploy Khulnasoft Scanner in your desired cluster and the newly deployed scanner will get added to the existing Khulnasoft server.

@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: khulnasoft-web
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-web
+spec:      
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 8443
+      name: khulnasoft-web-ssl
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+      name: khulnasoft-web
+  selector:
+    app: khulnasoft-web
+  type: LoadBalancer
+---
+#headless service for khulnasoft gateway
+apiVersion: v1
+kind: Service
+metadata:
+  name: khulnasoft-gateway-headless
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-gateway
+spec:
+  clusterIP: None
+  type: ClusterIP
+  ports:
+  - name: khulnasoft-gate-ssl
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  - name: khulnasoft-gate
+    port: 3622
+    protocol: TCP
+    targetPort: 3622
+  - name: khulnasoft-health
+    port: 8082
+    protocol: TCP
+    targetPort: 8082
+  selector:
+    app: khulnasoft-gateway

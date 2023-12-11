@@ -1,0 +1,331 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: khulnasoft-db
+    khulnasoft.component: database
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-db
+  namespace: khulnasoft
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: khulnasoft-db
+  type: ClusterIP 
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: khulnasoft-db
+    khulnasoft.component: database
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-db
+  namespace: khulnasoft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-db
+  template:
+    metadata:
+      labels:
+        khulnasoft.component: database
+        app: khulnasoft-db
+      name: khulnasoft-db
+      namespace: khulnasoft
+    spec:
+      securityContext:
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 11433
+      serviceAccount: khulnasoft-sa
+      restartPolicy: Always
+      initContainers:
+      - name: khulnasoft-db-init
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-db-config
+        image: registry.khulnasoft.com/database:2022.4
+        command: [ "sh", "-c", "[ -f $PGDATA/server.key ] && chmod 600 $PGDATA/server.key || echo 'OK' " ]
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-db
+      containers:
+      - name: khulnasoft-db
+        securityContext:
+          privileged: false
+        image: registry.khulnasoft.com/database:2022.4
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-db-config
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-db
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+      volumes:
+      - name: postgres-db
+        persistentVolumeClaim:
+          claimName: khulnasoft-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: khulnasoft-audit-db
+    khulnasoft.component: database-audit
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-audit-db
+  namespace: khulnasoft
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: khulnasoft-audit-db
+  type: ClusterIP 
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: khulnasoft-audit-db
+    khulnasoft.component: database-audit
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-audit-db
+  namespace: khulnasoft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-audit-db
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-audit-db
+        khulnasoft.component: database-audit
+      name: khulnasoft-audit-db
+      namespace: khulnasoft
+    spec:
+      securityContext:
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 11433
+      serviceAccount: khulnasoft-sa
+      restartPolicy: Always
+      initContainers:
+      - name: khulnasoft-audit-db-init
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-audit-db
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-db-config
+        image: registry.khulnasoft.com/database:2022.4
+        command: [ "sh", "-c", "[ -f $PGDATA/server.key ] && chmod 600 $PGDATA/server.key || echo 'OK' " ]
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-db
+      containers:
+      - name: khulnasoft-audit-db
+        securityContext:
+          privileged: false
+        image: registry.khulnasoft.com/database:2022.4
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-db-config
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-audit-db
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-db
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+      volumes:
+      - name: postgres-db
+        persistentVolumeClaim:
+          claimName: khulnasoft-audit-db-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: khulnasoft-web
+  namespace: khulnasoft
+  labels:
+    khulnasoft.component: server
+    app: khulnasoft-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-web
+  template:
+    metadata:
+      labels:
+        khulnasoft.component: server
+        app: khulnasoft-web
+      name: khulnasoft-web
+    spec:
+      securityContext:
+        runAsUser: 11431
+        runAsGroup: 11433
+        fsGroup: 11433
+      serviceAccount: khulnasoft-sa
+      restartPolicy: Always
+      containers:
+      - name: khulnasoft-web
+        image: registry.khulnasoft.com/console:2022.4
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        - containerPort: 8443
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-server-config
+        # - secretRef:
+        #     name: khulnasoft-csp-server-secret
+        env:
+        - name: KHULNASOFT_PUBSUB_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+        - name: SCALOCK_AUDIT_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-audit-db
+        - name: SCALOCK_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+      #   volumeMounts:
+      #   - mountPath: /opt/khulnasoft/ssl
+      #     name: khulnasoft-grpc-web
+      #     readOnly: true
+      # volumes:
+      # - name: khulnasoft-grpc-web
+      #   secret:
+      #     secretName: khulnasoft-grpc-web
+      #     items:
+      #     - key: khulnasoft_web.crt
+      #       path: cert.pem
+      #     - key: khulnasoft_web.key
+      #       path: key.pem
+      #     - key: rootCA.crt
+      #       path: ca.pem
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: khulnasoft-gateway
+    khulnasoft.component: gateway
+  name: khulnasoft-gateway
+  namespace: khulnasoft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-gateway
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-gateway
+        khulnasoft.component: gateway
+      name: khulnasoft-gateway
+    spec:
+      securityContext:
+        runAsUser: 11431
+        runAsGroup: 11433
+        fsGroup: 11433
+      serviceAccount: khulnasoft-sa
+      restartPolicy: Always
+      containers:
+      - name: khulnasoft-gateway
+        image: registry.khulnasoft.com/gateway:2022.4
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          tcpSocket:
+            port: 8443
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        ports:
+        - containerPort: 3622
+          protocol: TCP
+        - containerPort: 8443
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-server-config
+        env:
+        - name: SCALOCK_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+        - name: SCALOCK_AUDIT_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-audit-db
+      #   volumeMounts:
+      #   - mountPath: /opt/khulnasoft/ssl
+      #     name: khulnasoft-grpc-gateway
+      #     readOnly: true
+      # volumes:
+      # - name: khulnasoft-grpc-gateway
+      #   secret:
+      #     secretName: khulnasoft-grpc-gateway
+      #     items:
+      #     - key: khulnasoft_gateway.crt
+      #       path: cert.pem
+      #     - key: khulnasoft_gateway.key
+      #       path: key.pem
+      #     - key: rootCA.crt
+      #       path: ca.pem

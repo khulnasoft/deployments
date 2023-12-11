@@ -1,0 +1,283 @@
+:version: 2022.4
+:imageVersion: 2022.4
+
+= Deploy Server on AWS ECS Cluster
+
+image:https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png[Launch Stack,link=https://console.aws.amazon.com/cloudformation/home?#/stacks/new?stackName=khulnasoft-ecs&templateURL=https://s3.amazonaws.com/khulnasoft-security-public/{version}/khulnasoftEcs.yaml]
+
+== Overview
+
+This page contains instructions for deploying Khulnasoft Enterprise Self-Hosted edition on an Amazon ECS EC2 cluster. Using the deployment instructions in this page, you can deploy Server and Khulnasoft Enforcer in one ECS cluster with advanced configurations. These configurations include:
+
+- A separate DB (Database) for Audit
+- External DB
+- SSL enablement for the Khulnasoft console
+- Active-active Server mode
+
+For high availability, you must deploy Khulnasoft on 2 availability Zones (AZs).
+
+Your deployment creates the following services:
+
+- Amazon Application Load Balancer
+- Khulnasoft Console
+- Khulnasoft Database, created on a new Amazon RDS instance, which includes 7 days of rolling backups
+- Khulnasoft Audit Database, created on a new Amazon RDS instance, which includes 7 days of rolling backups
+- Khulnasoft Gateway
+- Khulnasoft Enforcer, each on an ECS instance
+
+In addition, it creates an IAM role for granting Khulnasoft Server, the access to ECR (Elastic Container Registry).
+
+A CloudFormation template is used to deploy Khulnasoft Enterprise. This can be done either with the AWS CloudFormation Management Console or the AWS Command Line interface (CLI), as explained below.
+
+== Prerequisites
+
+- An ECS cluster with at least 2 instances registered
+- A VPC with at least 2 subnets
+- A certificate through AWS Certificate Manager
+- From Khulnasoft Security: your Khulnasoft credentials (username and password) and Enterprise License Token
+
+== Pre-deployment
+
+*Step 1. Login to the Khulnasoft Registry with your credentials.*
+
+[source,options="nowrap",subs="attributes"]
+----
+ docker login registry.khulnasoft.com -u <KHULNASOFT_USERNAME> -p <KHULNASOFT_PASSWORD>
+----
+
+*Step 2. Pull the Khulnasoft product images for the Server (Console), Gateway, and Khulnasoft Enforcer.*
+
+[source,options="nowrap",subs="attributes"]
+----
+docker pull registry.khulnasoft.com/console:{imageVersion}
+docker pull registry.khulnasoft.com/gateway:{imageVersion}
+docker pull registry.khulnasoft.com/enforcer:{imageVersion}
+----
+
+*Step 3. Push all the images to ECR.*
+
+== Deployment method 1: CloudFormation Management Console
+
+*Step 1. Click the Launch Stack icon at the top of this page.* This will take you to the *Create stack* function of the AWS CloudFormation Management Console.
+
+*Step 2. Ensure that your AWS region is set to where you want to deploy Khulnasoft Enterprise.*
+
+*Step 3. Click Next.*
+
+*Step 4. Set or modify any of the parameters* as explained in the <<Advanced configurations>> section.
+
+*Step 5. Click Next to create the stack.*
+
+It will typically require up to 20 minutes for Khulnasoft Enterprise to be deployed. When completed, you can obtain the DNS name of the Khulnasoft Server UI from the console output, under key name `KhulnasoftConsole`.
+
+== Deployment method 2: CLI
+
+*Step 1. Copy the following command.*
+
+[source,options="nowrap",subs="attributes"]
+----
+aws --region us-east-1 cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM --stack-name khulnasoft-ec2 --template-body file://khulnasoftEcs.yaml \
+--parameters ParameterKey=ECSClusterName,ParameterValue=xxxxx \
+ParameterKey=VpcId,ParameterValue=vpc-xxxx \
+ParameterKey=VpcCidr,ParameterValue=x.x.x.x/x \
+ParameterKey=EcsInstanceSubnets,ParameterValue=\"subnet-xxxx,subnet-xxxx\" \
+ParameterKey=LbSubnets,ParameterValue=\"subnet-xxxx,subnet-xxxx\" \
+ParameterKey=SSLCert,ParameterValue=\"arn:aws:acm:us-east-1:1234567890:certificate/xxxxxxxxxxxx\"
+ParameterKey=LBScheme,ParameterValue=\"internet-facing\"
+ParameterKey=KhulnasoftConsoleAccess,ParameterValue=x.x.x.x/x \
+ParameterKey=KhulnasoftServerImage,ParameterValue=xxxx.dkr.ecr.us-east-1.amazonaws.com/khulnasoft:server-x.x \
+ParameterKey=KhulnasoftGatewayImage,ParameterValue=xxxx.dkr.ecr.us-east-1.amazonaws.com/khulnasoft:gateway-x.x \
+ParameterKey=KhulnasoftEnforcerImage,ParameterValue=xxxx.dkr.ecr.us-east-1.amazonaws.com/khulnasoft:enforcer-x.x \
+ParameterKey=BatchinstallToken,ParameterValue=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxx \
+ParameterKey=RdsInstanceClass,ParameterValue=db.t3.medium \
+ParameterKey=RdsStorage,ParameterValue=50 \
+ParameterKey=MultiAzDatabase,ParameterValue=false \
+ParameterKey=AuditRdsInstanceClass,ParameterValue=db.t3.medium \
+ParameterKey=EcsSecurityGroupId,ParameterValue=XXXXX \
+ParameterKey=ActiveActive,ParameterValue=XXXXX \
+----
+
+*Step 2. Set the parameters as explained in the <<Advanced configurations>> section.*
+
+*Step 3. Run the AWS create-stack CLI command.*
+
+It will typically require up to 20 minutes for your stack to be created and deployed. When completed, you can obtain the DNS name of the Khulnasoft Server UI from the console output, under key name `KhulnasoftConsole`.
+
+== Advanced configurations
+
+=== Active-Active Server deployment
+
+For an Active-active Server configuration, select the ActiveActive parameter value as `true` while creating the stack.
+
+=== Split DB deployment
+
+Having a seprate DB for audit events is an optional parameter. Following are the values for this parameter:
+
+- Select `Yes` for AuditRDS parameter if you would like to create a separate RDS instance
+- Select `No` to use single RDS instance for both the Khulnasoft DB and Audit DB
+- Default value for AuditRDS (or split DB) is `No`
+
+=== External DB (Managed DB)
+
+image:https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png[Launch Stack,link=https://console.aws.amazon.com/cloudformation/home?#/stacks/new?stackName=khulnasoft-ecs&templateURL=https://s3.amazonaws.com/khulnasoft-security-public/{version}/khulnasoftEcs-external.yaml]
+
+If you have an existing PostgreSQL database and want to use the same for khulnasoft deployment, use the cloudformation template `khulnasoftEcs-external.yaml` from this directory, in the CLI shown above.
+
+=== Configuring mTLS/TLS
+By default, deploying Khulnasoft Enterprise configures TLS-based encrypted communication, using self-signed certificates, between Khulnasoft components. If you want to use self-signed certificates to establish mTLS between khulnasoft components use the below instrictions to generate rootCA and component certificates
+
+==== Create Root CA
+
+*Step 1. Create Root Key*
+
+
+```shell
+openssl genrsa -des3 -out rootCA.key 4096
+```
+
+__If you want a non password protected key just remove the `-des3` option
+__
+
+*Step 2. Create and self-sign the root certificate*
+
+
+ openssl req -x509 -new -nodes -key rootCA.key -sha256 -days 1024 -out rootCA.crt
+
+
+==== Generate Khulnasoft component certificates
+
+*Step 3. Generate keys*
+
+Create certificate keys for the Server, Gateway, and Khulnasoft Enforcer.
+
+    openssl genrsa -out khulnasoft-console.key 2048
+    openssl genrsa -out khulnasoft-gateway.key 2048
+    openssl genrsa -out khulnasoft-enforcer.key 2048
+
+
+*Step 4. Create Khulnasoft Console certificate*
+
+====== Create the Khulnasoft Console SSL config file
+
+Specify the Khulnasoft Console service name followed by the HTTPS port as common name and any other alternate names as SAN DNS entries:
+
+
+    cat >khulnasoft-console.conf <<EOF
+    [ req ]
+    default_bits = 2048
+    distinguished_name = req_distinguished_name
+    req_extensions = req_ext
+    prompt = no
+    [ req_distinguished_name ]
+    countryName = Country Name (2 letter code)
+    stateOrProvinceName = State or Province Name (full name)
+    localityName = Locality Name (e.g., city)
+    organizationName = Organization Name (e.g., company)
+    commonName = Common Name (e.g., server FQDN or YOUR name)
+    [ req_ext ]
+    subjectAltName = @alt_names
+    [alt_names]
+    DNS.1 = <console host public DNS>
+    DNS.2 = <console service DNS e.g. khulnasoft-web>
+    IP.1 = <console service IP e.g. 10.X.X.X>
+    EOF
+
+====== Generate a CSR file for Khulnasoft Console from the configuration above.
+
+
+    openssl req -new -sha256 -key khulnasoft-console.key -config khulnasoft-console.conf -out khulnasoft-console.csr
+
+
+
+
+====== Generate the certificate using the CSR along with appropriate private keys and get it signed by the CA root key.
+
+    openssl x509 -req -in khulnasoft-console.csr -CA rootCA.crt\
+    -CAkey rootCA.key -CAcreateserial \
+    -out khulnasoft-console.crt -days 500 -sha256 \
+    -extensions req_ext -extfile khulnasoft-console.conf
+
+
+*Step 5. Create Khulnasoft Gateway certificate*
+
+====== Create the Khulnasoft Gateway SSL config file
+Specify the Khulnasoft Gateway service name as a common name and any other alternate names as SAN DNS entries.
+
+
+    cat >khulnasoft-gateway.conf <<EOF
+    [ req ]default_bits = 2048
+    distinguished_name = req_distinguished_name
+    req_extensions = req_ext
+    prompt = no
+    [ req_distinguished_name ]
+    countryName = Country Name (2 letter code)
+    stateOrProvinceName = State or Province Name (full name)
+    localityName = Locality Name (e.g., city)
+    organizationName = Organization Name (e.g., company)
+    commonName = Common Name (e.g., server FQDN or YOUR name)
+    [ req_ext ]
+    subjectAltName = @alt_names
+    [alt_names]
+    DNS.1 = <gateway host public DNS>
+    DNS.2 = <gateway service DNS e.g. khulnasoft-gateway>
+    IP.1 = <gateway service IP e.g. 10.X.X.X>
+    EOF
+
+
+====== Generate a CSR file for khulnasoft_gateway from the configuration above.
+
+
+    openssl req -new -sha256 -key khulnasoft-gateway.key -config khulnasoft-gateway.conf -out khulnasoft-gateway.csr
+
+====== Generate the certificate using the CSR along with appropriate private keys and get it signed by the CA root key.
+
+    openssl x509 -req -in khulnasoft-gateway.csr -CA rootCA.crt -CAkey rootCA.key \
+    -CAcreateserial -out khulnasoft-gateway.crt -days 500 \
+    -sha256 -extensions req_ext -extfile khulnasoft-gateway.conf
+
+*Step 6. Create Khulnasoft Enforcer certificate*
+
+====== Create the Khulnasoft Enforcer (DaemonSet) SSL config file
+Specify the Khulnasoft Enforcer service name as a common name.
+
+
+    openssl req -new -sha256 -key khulnasoft-enforcer.key -subj "/C=US/ST=MA/O=khulnasoft/CN=khulnasoft-agent" -out khulnasoft-enforcer.csr
+
+====== Generate the certificate using the CSR along with appropriate private keys and get it signed by the CA root key.
+
+    openssl x509 -req -in khulnasoft-enforcer.csr -CA rootCA.crt \
+    -CAkey rootCA.key -CAcreateserial -out khulnasoft-enforcer.crt \
+    -days 500 -sha256
+
+*Step 7. Verify certificates (optional)*
+
+Verify the contents of all the certificates by running these commands.
+
+    openssl x509 -in khulnasoft-console.crt -text -noout
+    openssl x509 -in khulnasoft-gateway.crt -text -noout
+    openssl x509 -in khulnasoft-enforcer.crt -text -noout
+
+*Step 8. Upload certificates and key to AWS secret manager*
+
+Upload the following certificates and keys to AWS secret manager:
+
+* rootCA.crt
+* khulnasoft-console.crt
+* khulnasoft-console.key
+* khulnasoft-gateway.crt
+* khulnasoft-gateway.key
+* khulnasoft-enforcer.crt
+* khulnasoft-enforcer.key
+
+*Step 9. Upload Khulnasoft Console certificates and key to AWS certificate manager*
+
+*Step 10. Update cloudformation stack*
+
+* Enable _TLSEnabled_
+* Enable _TlsVerify_
+* Enter Khulnasoft Console, Gateway and Enforcer secrets ARN
+* Replace SSLCert with the new  ARN of the SSL certificate
+
+== Version upgrade
+
+To upgrade your Khulnasoft Enterprise version, modify the existing stack with the new Khulnasoft product images.

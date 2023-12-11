@@ -1,0 +1,729 @@
+apiVersion: v1
+data:
+  ### Khulnasoft database password. Defaults to "password". Please change the same if needed.
+  password: cGFzc3dvcmQK
+kind: Secret
+metadata:
+  annotations:
+    description: Khulnasoft database password secret
+  labels:
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-db
+  namespace: khulnasoft
+type: Opaque
+---
+apiVersion: v1
+data:
+  ### Khulnasoft database password. Defaults to "password". Please change the same if needed.
+  password: cGFzc3dvcmQK
+kind: Secret
+metadata:
+  annotations:
+    description: Khulnasoft database password secret
+  labels:
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-audit-db
+  namespace: khulnasoft
+type: Opaque
+---
+apiVersion: v1
+data:
+  ### Khulnasoft enforcer token input needed - Base64 encoded ###
+  token: "dG9rZW4="
+kind: Secret
+metadata:
+  annotations:
+    description: Khulnasoft Enforcer token secret
+  labels:
+    deployedby: khulnasoft-yaml
+  name: enforcer-token
+  namespace: khulnasoft
+type: Opaque
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: khulnasoft-csp-db-config
+  namespace: khulnasoft
+data:
+  KHULNASOFT_ENV_SIZE: "S" # Possible values: “S”, “M”, “L”, defaults to “S”.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: khulnasoft-csp-server-config
+  namespace: khulnasoft
+data:  
+  # The name of the HTTP header used by the Khulnasoft Server for authentication. Defaults to the standard Authorization header. Can be used when running behind reverse proxies that override this header.
+  #AUTHORIZATION_HEADER: "khulnasoft-auth"
+  # DNS name or IP address of the host of the Postgres Audit database.
+  SCALOCK_AUDIT_DBHOST: "khulnasoft-audit-db" 
+  # Name of the Postgres Audit database; all letters must be lower-case
+  SCALOCK_AUDIT_DBNAME: "slk_audit"
+  # Port of the Postgres Audit database.
+  SCALOCK_AUDIT_DBPORT: "5432"
+  # Set the value of this variable to require to strictly require an SSL encrypted connection to the Postgres Audit database.
+  SCALOCK_AUDIT_DBSSL: "require"
+  # Username for connection to the Postgres Audit database.
+  SCALOCK_AUDIT_DBUSER: "postgres"
+  # DNS name or IP address of the host of the Postgres configuration database.
+  SCALOCK_DBHOST: "khulnasoft-db"
+  # Name of the Postgres configuration database name; all letters must be lower-case.
+  SCALOCK_DBNAME: "scalock"
+  # Port of the Postgres configuration database.
+  SCALOCK_DBPORT: "5432"
+  # Set the value of this variable to require to strictly require an SSL-encrypted connection to the Postgres configuration database.
+  SCALOCK_DBSSL: "require"
+  # Username for connection to the Postgres configuration database
+  SCALOCK_DBUSER: "postgres"
+  # Setting this might be helpful for problem determination. Acceptable values are DEBUG, INFO, WARN, and ERROR
+  SCALOCK_LOG_LEVEL: "DEBUG"
+  # Configure this variable with the IP address or DNS name of the Khulnasoft Server, including the port number (8443 by default).
+  KHULNASOFT_CONSOLE_SECURE_ADDRESS: "khulnasoft-web:443"
+  # Specify the desired public IP address of the Khulnasoft Gateway. Used to make the Enforcer connect to the Gateway through this IP address.
+  SCALOCK_GATEWAY_PUBLIC_IP: "khulnasoft-gateway"
+  # Specify 0.0.0.0:80 to bring up an HTTP responder on port 80, for use with active load balancers. The port can be changed as needed.
+  HEALTH_MONITOR: "0.0.0.0:8082"
+  # Server's private key for HTTPS and Mutual Auth
+  #KHULNASOFT_PRIVATE_KEY: "/opt/khulnasoft/ssl/key.pem"
+  # Server's public key for HTTPS and Mutual Auth
+  #KHULNASOFT_PUBLIC_KEY: "/opt/khulnasoft/ssl/cert.pem"
+  # Server's root CA cert for HTTPS and Mutual Auth. The root CA certificate file should be mutual for both Gateway and Server certificates
+  #KHULNASOFT_ROOT_CA: "/opt/khulnasoft/ssl/ca.pem"
+  KHULNASOFT_CLUSTER_MODE: "active-active"
+  # DNS name or IP address of the host of the Postgres pubsub database
+  KHULNASOFT_PUBSUB_DBHOST: "khulnasoft-db"
+  # Database schema name; set this to the name of your choice. All letters must be lower-case.
+  KHULNASOFT_PUBSUB_DBNAME: "khulnasoft_pubsub"
+  # Username for connection to the Postgres pubsub database
+  KHULNASOFT_PUBSUB_DBUSER: "postgres"
+  KHULNASOFT_PUBSUB_DBPORT: "5432"
+  # DNS name or IP address of an Khulnasoft Gateway that the Khulnasoft Enforcer will first connect to.
+  BATCH_INSTALL_GATEWAY: "khulnasoft-gateway"
+  # Orchestrator type to be configured on enforcers.
+  BATCH_INSTALL_ORCHESTRATOR: "Kubernetes"
+  # Name of the Batch Install object used to connect Khulnasoft Enforcers to the environment.
+  BATCH_INSTALL_NAME: "khulnasoftyaml-default" 
+  KHULNASOFT_GATEWAY_TOKEN: "1234"
+  KHULNASOFT_DEFAULT_GATEWAY_TOKEN: "1234"
+  BATCH_INSTALL_TOKEN: "token"
+  # Automatic connection KE Batch Install (Enforcer Group) name + token
+  #KHULNASOFT_KE_GROUP_NAME: "khulnasoftyaml-default-ke"
+  #KHULNASOFT_KE_GROUP_TOKEN: "token-ke"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: khulnasoft-csp-enforcer
+  namespace: khulnasoft
+data:
+  KHULNASOFT_HEALTH_MONITOR_ENABLED: "true"
+  KHULNASOFT_INSTALL_PATH: "/var/lib/khulnasoft"
+  KHULNASOFT_SERVER: "khulnasoft-gateway:8443"
+  RESTART_CONTAINERS: "no"
+  KHULNASOFT_LOGICAL_NAME: ""
+---
+apiVersion: v1
+imagePullSecrets:
+- name: khulnasoft-registry
+kind: ServiceAccount
+metadata:
+  annotations:
+    description: Service account for pulling Khulnasoft images and for Khulnasoft privileged
+  labels:
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-sa
+  namespace: khulnasoft
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: khulnasoft-discovery-cr
+  labels:
+    rbac.example.com/aggregate-to-monitoring: "true"
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "services", "endpoints", "pods", "deployments", "namespaces","componentstatuses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["imagestreams", "imagestreams/layers"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: khulnasoft-discovery-crb
+roleRef:
+  name: khulnasoft-discovery-cr
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+subjects:
+  - kind: ServiceAccount
+    name: khulnasoft-sa
+    namespace: khulnasoft
+# ---
+# # Create PV for the Khulnasoft Database
+# apiVersion: v1
+# kind: PersistentVolume
+# metadata:
+#   name: khulnasoft-db-pv
+#   namespace: khulnasoft
+#   labels:
+#     for_pod: khulnasoft-db
+# spec:
+#   persistentVolumeReclaimPolicy: Retain
+#   capacity:
+#     storage: 50Gi
+#   accessModes:
+#     - ReadWriteOnce
+# ---
+# # Create a PVC for the Khulnasoft Database
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: khulnasoft-db-pvc
+#   namespace: khulnasoft
+# spec:
+#   selector:
+#     matchLabels:
+#       for_pod: khulnasoft-db
+#   accessModes:
+#   - ReadWriteOnce
+#   resources:
+#     requests:
+#       storage: 50Gi
+#   volumeName: khulnasoft-db-pv
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: khulnasoft-audit-db
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-audit-db
+  namespace: khulnasoft
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: khulnasoft-audit-db
+  type: ClusterIP 
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: khulnasoft-audit-db
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-audit-db
+    khulnasoft.component: database-audit
+    deployedby: khulnasoft-yaml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-audit-db
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-audit-db
+      name: khulnasoft-audit-db
+      namespace: khulnasoft
+    spec:
+      containers:
+        - name: khulnasoft-audit-db
+          image: registry.khulnasoft.com/database:2022.4
+          ports:
+            - name: khulnasoft-audit-db
+              containerPort: 5432
+              protocol: TCP
+          volumeMounts:
+            - name: postgres-audit-db
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+          envFrom:
+            - configMapRef:
+                name: khulnasoft-csp-db-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: khulnasoft-db
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      serviceAccountName: khulnasoft-sa
+      serviceAccount: khulnasoft-sa
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-audit-db
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 50G
+  serviceName: khulnasoft-audit-db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: khulnasoft-db
+    deployedby: khulnasoft-yaml
+  name: khulnasoft-db
+  namespace: khulnasoft
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: khulnasoft-db
+  type: ClusterIP 
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: khulnasoft-db
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-db
+    khulnasoft.component: database
+    deployedby: khulnasoft-yaml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-db
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-db
+      name: khulnasoft-db
+      namespace: khulnasoft
+    spec:
+      containers:
+        - name: khulnasoft-db
+          image: registry.khulnasoft.com/database:2022.4
+          ports:
+            - name: khulnasoft-db
+              containerPort: 5432
+              protocol: TCP
+          volumeMounts:
+            - name: postgres-db
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+          envFrom:
+            - configMapRef:
+                name: khulnasoft-csp-db-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: khulnasoft-db
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      serviceAccountName: khulnasoft-sa
+      serviceAccount: khulnasoft-sa
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-db
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 50G
+  serviceName: khulnasoft-db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: khulnasoft-web
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-web
+spec:      
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 8443
+      name: khulnasoft-web-ssl
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+      name: khulnasoft-web
+  selector:
+    app: khulnasoft-web
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: khulnasoft-web
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-web
+    khulnasoft.component: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-web
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-web
+      name: khulnasoft-web
+    spec:
+      securityContext:
+        runAsUser: 11431
+        runAsGroup: 11433
+        fsGroup: 11433
+      serviceAccount: khulnasoft-sa
+      restartPolicy: Always
+      containers:
+      - name: khulnasoft-web
+        image: registry.khulnasoft.com/console:2022.4
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        - containerPort: 8443
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-server-config
+        # - secretRef:
+        #     name: khulnasoft-csp-server-secret
+        env:
+        - name: KHULNASOFT_PUBSUB_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+        - name: SCALOCK_AUDIT_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-audit-db
+        - name: SCALOCK_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+      #   volumeMounts:
+      #   - mountPath: /opt/khulnasoft/ssl
+      #     name: khulnasoft-ssl
+      #     readOnly: true
+      # volumes:
+      # - name: khulnasoft-ssl
+      #   secret:
+      #     secretName: khulnasoft-ssl
+      #     items:
+      #     - key: khulnasoft.crt
+      #       path: cert.pem
+      #     - key: khulnasoft.key
+      #       path: key.pem
+      #     - key: ca.crt
+      #       path: ca.pem
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: khulnasoft-gateway
+  namespace: khulnasoft
+  labels:
+    app: khulnasoft-gateway
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8443
+      protocol: TCP
+      targetPort: 8443
+      name: khulnasoft-gateway-ssl
+    - port: 3622
+      protocol: TCP
+      targetPort: 3622
+      name: khulnasoft-gateway
+  selector:
+    app: khulnasoft-gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: khulnasoft-gateway
+    khulnasoft.component: gateway
+  name: khulnasoft-gateway
+  namespace: khulnasoft
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: khulnasoft-gateway
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-gateway
+      name: khulnasoft-gateway
+    spec:
+      securityContext:
+        runAsUser: 11431
+        runAsGroup: 11433
+        fsGroup: 11433
+      serviceAccount: khulnasoft-sa
+      restartPolicy: Always
+      containers:
+      - name: khulnasoft-gateway
+        image: registry.khulnasoft.com/gateway:2022.4
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 8443
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        ports:
+        - containerPort: 3622
+          protocol: TCP
+        - containerPort: 8443
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-server-config
+        env:
+        - name: SCALOCK_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-db
+        - name: SCALOCK_AUDIT_DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: khulnasoft-audit-db
+      #   volumeMounts:
+      #   - mountPath: /opt/khulnasoft/ssl
+      #     name: khulnasoft-ssl
+      #     readOnly: true
+      # volumes:
+      # - name: khulnasoft-ssl
+      #   secret:
+      #     secretName: khulnasoft-ssl
+      #     items:
+      #     - key: khulnasoft.crt
+      #       path: cert.pem
+      #     - key: khulnasoft.key
+      #       path: key.pem
+      #     - key: ca.crt
+      #       path: ca.pem
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: khulnasoft-agent
+    khulnasoft.component: enforcer
+  name: khulnasoft-agent
+  namespace: khulnasoft
+spec:
+  selector:
+    matchLabels:
+      app: khulnasoft-agent
+  template:
+    metadata:
+      labels:
+        app: khulnasoft-agent
+      name: khulnasoft-agent
+      namespace: khulnasoft
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/khulnasoft-agent: unconfined
+    spec:
+      containers:
+      - env:
+        - name: KHULNASOFT_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: KHULNASOFT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: enforcer-token
+        envFrom:
+        - configMapRef:
+            name: khulnasoft-csp-enforcer
+        image: registry.khulnasoft.com/enforcer:2022.4
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8096
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readinessz
+            port: 8096
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        ports:
+        - containerPort: 8096
+          protocol: TCP
+        name: khulnasoft-agent
+        resources: {}
+        securityContext:
+          privileged: false
+          capabilities:
+              add:
+                - SYS_ADMIN
+                - NET_ADMIN
+                - NET_RAW
+                - SYS_PTRACE
+                - KILL
+                - MKNOD
+                - SETGID
+                - SETUID
+                - SYS_MODULE
+                - AUDIT_CONTROL
+                - SYSLOG
+                - SYS_CHROOT
+                - SYS_RESOURCE
+                - IPC_LOCK
+                - LINUX_IMMUTABLE
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/run
+          name: var-run
+        - mountPath: /dev
+          name: dev
+        - mountPath: /host/sys
+          name: sys
+          readOnly: true
+        - mountPath: /host/proc
+          name: proc
+          readOnly: true
+        - mountPath: /host/etc
+          name: etc
+          readOnly: true
+        - mountPath: /host/opt/khulnasoft
+          name: khulnasoft
+          readOnly: true
+        - mountPath: /opt/khulnasoft/tmp
+          name: khulnasoft-tmp
+        - mountPath: /opt/khulnasoft/audit
+          name: khulnasoft-audit
+        - mountPath: /data
+          name: khulnasoft-data
+      dnsPolicy: ClusterFirst
+      hostPID: true
+      imagePullSecrets:
+      - name: khulnasoft-registry
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccount: khulnasoft-sa
+      serviceAccountName: khulnasoft-sa
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - hostPath:
+          path: /var/run
+          type: ""
+        name: var-run
+      - hostPath:
+          path: /dev
+          type: ""
+        name: dev
+      - hostPath:
+          path: /sys
+          type: ""
+        name: sys
+      - hostPath:
+          path: /proc
+          type: ""
+        name: proc
+      - hostPath:
+          path: /etc
+          type: ""
+        name: etc
+      - hostPath:
+          path: /var/lib/khulnasoft
+          type: ""
+        name: khulnasoft
+      - hostPath:
+          path: /var/lib/khulnasoft/tmp
+          type: ""
+        name: khulnasoft-tmp
+      - hostPath:
+          path: /var/lib/khulnasoft/audit
+          type: ""
+        name: khulnasoft-audit
+      - hostPath:
+          path: /var/lib/khulnasoft/data
+          type: ""
+        name: khulnasoft-data
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate

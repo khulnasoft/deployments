@@ -1,0 +1,13 @@
+[Unit]
+Description=Khulnasoft Security Enforcer RunC
+
+[Service]
+Type=forking
+ExecStart={{ .Values.WorkingDirectory }}/run.sh
+ExecStopPost={{ .Values.RuncPath }} delete enforcer
+WorkingDirectory={{ .Values.WorkingDirectory }}
+PIDFile=/run/khulnasoft-enforcer.pid
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
